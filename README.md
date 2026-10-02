@@ -1,4 +1,4 @@
-# OpenVPN Wizard
+# OpenVPN Wizard v1.1.0
 
 <p align="center">
   <img src="assets/logo.svg" alt="OpenVPN Wizard" width="200"/>
@@ -11,9 +11,13 @@
 <p align="center">
   <a href="#features">Features</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#architecture">Architecture</a> •
+  <a href="#installation">Installation</a> •
   <a href="#management">Management</a> •
+  <a href="#architecture">Architecture</a> •
   <a href="#security">Security</a> •
+  <a href="#troubleshooting">Troubleshooting</a> •
+  <a href="#termux-android">Termux (Android)</a> •
+  <a href="#uninstall">Uninstall</a> •
   <a href="#contributing">Contributing</a>
 </p>
 
@@ -43,9 +47,16 @@
 
 ### 📱 Universal Clients
 - **Linux AMD64** — Auto-installer with systemd
-- **Termux ARM64** — Android native
+- **Android Termux** — Android native
 - **OpenVPN Connect** — iOS/macOS/Windows
 - **Single .ovpn file** — All certs/keys inline
+
+### 🛠️ Smart Management
+- **Quick install** — `--quick` flag for zero-prompt deploy
+- **OVPN retrieval** — `ovpn-get-ovpn <name>` with QR code
+- **User management** — `ovpn-add/revoke/list`
+- **Complete uninstall** — `ovpn-uninstall` (clean removal)
+- **QR codes** — Mobile import via OpenVPN Connect app
 
 ---
 
@@ -54,13 +65,15 @@
 ### Server (Ubuntu 22.04+/Debian 12+)
 
 ```bash
-# One-line install
-curl -fsSL https://raw.githubusercontent.com/yourname/openvpn-wizard/main/install.sh | sudo bash
+# Quick install (zero prompts)
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- --quick
 
-# Or clone and run
-git clone https://github.com/yourname/openvpn-wizard
-cd openvpn-wizard
-sudo ./install.sh
+# Custom install
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- \
+  --domain vpn.example.com --ip 1.2.3.4 --client john-doe --user john --pass "securepass123"
+
+# Interactive (with prompts)
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash
 ```
 
 **That's it.** The script:
@@ -71,20 +84,21 @@ sudo ./install.sh
 5. Configures HAProxy (SNI multiplexing, stats)
 6. Configures UFW + iptables NAT
 7. Generates client `.ovpn` with all certs inline
-8. Creates management CLI tools
+8. Creates management CLI tools (`ovpn-*`)
+9. Runs verification tests
 
 ### Client (Linux)
 
 ```bash
 # Auto-install on any distro
-curl -fsSL https://your-server.com/openvpn-wizard-linux.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/openvpn-wizard-linux.sh | sudo bash
 ```
 
 ### Client (Android Termux)
 
 ```bash
 # In Termux
-curl -fsSL https://your-server.com/openvpn-wizard-termux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/openvpn-wizard-termux.sh | bash
 # Then:
 openvpn-connect
 openvpn-disconnect
@@ -92,48 +106,50 @@ openvpn-disconnect
 
 ### Client (iOS/macOS/Windows)
 
-1. Download `.ovpn` from server: `https://your-server.com/01-JH-192.209.62.112.ovpn`
+1. Get `.ovpn`: `ovpn-get-ovpn client-name` (shows QR code)
 2. Import into OpenVPN Connect
-3. Enter username: `MHH06` / password: `S271m31h41`
+3. Enter username/password
 
 ---
 
-## Architecture
+## Installation
 
+### Quick Install (Zero Prompts)
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- --quick
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        INTERNET (443)                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  HAProxy (TCP/443)                                            │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │ SNI Routing                                             │   │
-│  │  ├── *.mhhdns.online  → Xray/VLESS Reality             │   │
-│  │  ├── cf.mhhdns.online   → OpenVPN TCP (non-TLS)        │   │
-│  │  └── default             → Web/Caddy                   │   │
-│  └─────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-       ┌───────────────┐               ┌───────────────┐
-       │ OpenVPN TCP   │               │ HAProxy Stats │
-       │ 0.0.0.0:1194  │               │    :8443      │
-       └───────────────┘               └───────────────┘
-              │
-              ▼
-       ┌───────────────┐
-       │  tun-tcp      │
-       │ 10.9.0.0/24   │
-       └───────────────┘
-              │
-              ▼
-       ┌───────────────┐
-       │   eth0        │────► Internet
-       │  MASQUERADE   │
-       └───────────────┘
+
+### Custom Install
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- \
+  --domain vpn.example.com \
+  --ip 1.2.3.4 \
+  --client john-doe \
+  --user john \
+  --pass "securepass123"
+```
+
+### Interactive (with prompts)
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash
+```
+
+### Uninstall (Complete Clean Removal)
+```bash
+# Via installed command
+ovpn-uninstall
+
+# Or directly
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- --uninstall
+```
+
+### Get OVPN File for Client
+```bash
+# Via installed command (shows QR code)
+ovpn-get-ovpn client-name
+
+# Or directly
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- --get-ovpn client-name
 ```
 
 ---
@@ -153,6 +169,12 @@ ovpn-list-clients
 # Show status
 ovpn-status
 
+# Get OVPN file with QR code
+ovpn-get-ovpn client-name
+
+# Complete uninstall
+ovpn-uninstall
+
 # Manual service control
 systemctl status openvpn-server@server
 systemctl restart openvpn-server@server
@@ -165,24 +187,121 @@ echo "show stat" | socat stdio /run/haproxy/admin.sock
 
 ---
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            CLIENT DEVICES                                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  Linux      │  │  Android    │  │  iOS/macOS  │  │  Windows    │        │
+│  │  (systemd)  │  │  (Termux)   │  │  (OpenVPN   │  │  (OpenVPN   │        │
+│  │             │  │             │  │   Connect)  │  │   Connect)  │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+└─────────┼────────────────┼────────────────┼────────────────┼────────────────┘
+          │                │                │                │
+          │    TCP/443     │    TCP/443     │    TCP/443     │    TCP/443
+          │   (TLS 1.3)    │   (TLS 1.3)    │   (TLS 1.3)    │   (TLS 1.3)
+          ▼                ▼                ▼                ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          HAProxy (TCP/443)                                  │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ SNI-Based Routing                                                  │   │
+│  │                                                                    │   │
+│  │  if { req_ssl_hello_type 1 } {                                     │   │
+│  │    # TLS ClientHello detected → route by SNI                       │   │
+│  │    use_backend xray_vless      if { req.ssl_sni -i *.domain.com } │   │
+│  │    use_backend web_caddy       if { req.ssl_sni -i web.domain.com }│   │
+│  │    use_backend openvpn_https   if { req.ssl_sni -i vpn.domain.com }│   │
+│  │  } else {                                                          │   │
+│  │    # No TLS ClientHello → OpenVPN TCP passthrough                  │   │
+│  │    use_backend openvpn_tcp                                           │   │
+│  │  }                                                                   │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+                              │                    │                    │
+              ┌───────────────┴───────────────┐  ┌─────────────────────────┐
+              ▼                               ▼  ▼                         ▼
+       ┌───────────────┐               ┌───────────────┐          ┌───────────────┐
+       │   Xray/VLESS  │               │  Caddy/Web    │          │   OpenVPN     │
+       │   Reality     │               │   Server      │          │   Server      │
+       │   :443 (TLS)  │               │   :80/:443    │          │   :1194 (TCP) │
+       └───────────────┘               └───────────────┘          └───────┬───────┘
+                                                                          │
+                                                                          ▼
+                                                                   ┌───────────────┐
+                                                                   │  OpenVPN      │
+                                                                   │  tun-tcp      │
+                                                                   │  10.9.0.0/24  │
+                                                                   └───────┬───────┘
+                                                                           │
+                                                                           ▼
+                                                                   ┌───────────────┐
+                                                                   │   eth0        │
+                                                                   │  MASQUERADE   │
+                                                                   │  10.9.0.0/24  │
+                                                                   └───────┬───────┘
+                                                                           │
+                                                                           ▼
+                                                                   ┌───────────────┐
+                                                                   │   INTERNET    │
+                                                                   └───────────────┘
+```
+
+---
+
 ## Security
 
 ### Threat Model
-| Threat | Mitigation |
-|--------|------------|
-| Passive DPI | HAProxy SNI + TLS 1.3 + tls-crypt-v2 |
-| Active probing | No OpenVPN fingerprint on wire |
-| Traffic correlation | Full tunnel, no split DNS |
-| Key compromise | tls-crypt-v2, no renegotiation |
-| IPv6 leaks | `block-ipv6` + `block-outside-dns` |
-| DNS leaks | `block-outside-dns`, forced DNS |
-| Quantum | secp384r1 > 128-bit classical security |
+| Adversary | Capabilities | Goal |
+|-----------|--------------|------|
+| **ISP/Government** | Full packet capture, DPI, flow analysis, active probing | Block/identify VPN traffic |
+| **Network Admin** | Port blocking, protocol inspection, certificate inspection | Prevent VPN usage |
+| **Active Attacker** | MITM, certificate spoofing, replay, injection | Intercept/modify traffic |
+| **Quantum Computer** | Shor's algorithm, Grover's algorithm | Break asymmetric crypto |
 
-### Hardening Applied
-- **OpenVPN**: systemd hardening (NoNewPrivileges, ProtectSystem=strict, CAP_DROP)
-- **HAProxy**: chroot, user/group, stats socket ACL
-- **Kernel**: BBR, conntrack max 1M, rp_filter=2, IP forwarding
-- **Firewall**: UFW default-deny, iptables NAT + FORWARD rules
+### Cryptographic Design
+- **Control Channel**: TLS 1.3 + tls-crypt-v2 (AES-256-CTR + HMAC-SHA256)
+- **Data Channel**: AES-256-GCM (hardware accelerated)
+- **Certificates**: ECDSA/secp384r1 (192-bit classical security)
+- **Forward Secrecy**: ECDHE per-session, no renegotiation
+
+### DPI Evasion
+| Technique | Implementation |
+|-----------|----------------|
+| Port 443 | Standard HTTPS port |
+| HAProxy SNI | Real TLS termination for other services |
+| tls-crypt-v2 | Encrypts control channel headers |
+| TCP over TLS | Raw TCP looks like HTTPS |
+| No compression | Removes VORACLE side-channel |
+
+### Leak Prevention
+- **IPv6**: `push "block-ipv6"`
+- **DNS**: `push "block-outside-dns"` + forced DNS (1.1.1.1, 1.0.0.1, 8.8.8.8)
+- **WebRTC**: Browser-level mitigation needed
+
+---
+
+## Client Apps
+
+### Linux (Auto-Install)
+```bash
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/openvpn-wizard-linux.sh | sudo bash
+```
+
+### Android (Termux)
+```bash
+# Install Termux from F-Droid
+termux-setup-storage
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/openvpn-wizard-termux.sh | bash
+# Then:
+openvpn-connect
+openvpn-disconnect
+```
+
+### iOS/macOS/Windows
+1. Get `.ovpn` with QR: `ovpn-get-ovpn client-name`
+2. Scan QR in OpenVPN Connect app
+3. Enter username/password
 
 ---
 
@@ -200,87 +319,51 @@ USERNAME="MHH06"
 PASSWORD="S271m31h41"
 ```
 
-### Custom Client Config
+### Quick Install Flags
 ```bash
-# Add custom options to generated .ovpn
-echo "route 10.0.0.0 255.0.0.0" >> /root/01-JH-192.209.62.112.ovpn
+--quick              # Zero prompts
+--domain vpn.example.com
+--ip 1.2.3.4
+--client john-doe
+--user john
+--pass "securepass123"
+--uninstall          # Complete removal
+--get-ovpn name      # Get OVPN + QR
 ```
 
 ---
 
-## File Structure
+## Uninstall
 
+```bash
+# Complete clean removal
+ovpn-uninstall
+
+# Or directly
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- --uninstall
 ```
-openvpn-wizard/
-├── install.sh                    # Main installer
-├── README.md                     # This file
-├── LICENSE                       # MIT
-├── scripts/
-│   ├── ovpn-add-client           # Add client CLI
-│   ├── ovpn-revoke-client        # Revoke client CLI
-│   ├── ovpn-list-clients         # List clients CLI
-│   └── ovpn-status               # Status CLI
-├── templates/
-│   ├── server.conf               # OpenVPN server template
-│   ├── haproxy.cfg               # HAProxy template
-│   ├── client.ovpn               # Client config template
-│   └── vars                      # EasyRSA vars
-├── systemd/
-│   ├── openvpn-hardening.conf    # systemd hardening
-│   └── openvpn-client@.service   # Client service
-├── docs/
-│   ├── ARCHITECTURE.md           # Detailed architecture
-│   ├── SECURITY.md               # Security model
-│   ├── TROUBLESHOOTING.md        # Common issues
-│   └── TERMUX.md                 # Termux guide
-├── assets/
-│   └── logo.svg                  # Project logo
-└── tests/
-    └── integration.sh            # CI integration tests
-```
+
+**Removes:**
+- All services (OpenVPN, HAProxy)
+- All configs (/etc/openvpn, /etc/haproxy, /etc/openvpn/easy-rsa)
+- All firewall rules (UFW, iptables NAT, FORWARD)
+- All packages (openvpn, easy-rsa, haproxy, etc.)
+- All certs, keys, logs, configs
+- Management scripts
+- Client configs
 
 ---
 
 ## Troubleshooting
 
-### Connection Drops After 5 Minutes
-```bash
-# Check HAProxy timeouts
-grep timeout /etc/haproxy/haproxy.cfg
-# Should be 86400s for client/server/tunnel
-```
-
-### No Internet Through VPN
-```bash
-# Check NAT
-iptables -t nat -L POSTROUTING -n -v | grep 10.9
-# Check forwarding
-iptables -L FORWARD -n -v | grep tun
-```
-
-### Android "Waiting for Server"
-```bash
-# Force IPv4 only in .ovpn
-proto tcp4-client
-# Check DNS resolves to IPv4 only
-dig +short cf.mhhdns.online A
-dig +short cf.mhhdns.online AAAA  # Should be empty
-```
-
----
-
-## Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
-
-### Code Style
-- Shell: ShellCheck clean, `set -euo pipefail`
-- Templates: Validated with `haproxy -c -f` / `openvpn --config`
-- Documentation: Markdown, consistent headers
+| Issue | Fix |
+|-------|-----|
+| Connection Drops After 5 Minutes | `timeout client/server/tunnel 86400s` in haproxy.cfg |
+| No Internet Through VPN | Check NAT: `iptables -t nat -L POSTROUTING -n -v \| grep 10.9` |
+| Android "Waiting for Server" | Add `proto tcp4-client` to .ovpn |
+| Compression Settings Not Allowed | Remove `comp-lzo` from server.conf |
+| Slow Speeds / High Latency | Enable BBR: `net.ipv4.tcp_congestion_control=bbr` |
+| HAProxy Stats Not Accessible | Check config: `haproxy -c -f /etc/haproxy/haproxy.cfg` |
 
 ---
 
@@ -290,15 +373,7 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
-## Acknowledgments
-
-- [OpenVPN](https://openvpn.net/) — The VPN standard
-- [HAProxy](https://www.haproxy.org/) — The load balancer
-- [EasyRSA](https://github.com/OpenVPN/easy-rsa) — PKI management
-- [tls-crypt-v2](https://github.com/OpenVPN/openvpn/blob/master/src/openvpn/tls_crypt_v2.c) — Post-quantum control channel
-
----
-
 <p align="center">
-  Made with ❤️ for privacy and freedom
+  Made with ❤️ for privacy and freedom<br>
+  <strong>OpenVPN Wizard v1.1.0</strong> — The easiest, most secure way to deploy OpenVPN
 </p>

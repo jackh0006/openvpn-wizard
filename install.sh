@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
-# OpenVPN Wizard — Hardened OpenVPN over TCP/443 with HAProxy
-# GitHub: https://github.com/yourname/openvpn-wizard
+# OpenVPN Wizard v1.1.0 — Hardened OpenVPN over TCP/443 with HAProxy
+# GitHub: https://github.com/Jackh0006/openvpn-wizard
 # License: MIT
 
 set -euo pipefail
+
+# ============================================================
+# VERSION
+# ============================================================
+VERSION="1.1.0"
 
 # ============================================================
 # CONFIGURATION — EDIT THESE BEFORE RUNNING
@@ -22,7 +27,9 @@ PASSWORD="S271m31h41"
 CIPHER="AES-256-GCM"
 AUTH="SHA256"
 TLS_CIPHER="TLS-AES-256-GCM-SHA384:TLS-AES-128-GCM-SHA256:TLS-CHACHA20-POLY1305-SHA256"
-# ============================================================
+
+# Quick install mode (skip prompts)
+QUICK_INSTALL=false
 
 # Colors for beautiful output
 RED='\033[0;31m'
@@ -92,6 +99,193 @@ detect_os() {
     log "Detected: $PRETTY_NAME"
 }
 
+# Quick install mode detection
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --quick|-q) QUICK_INSTALL=true; shift ;;
+            --domain) DOMAIN="$2"; shift 2 ;;
+            --ip) SERVER_IP="$2"; shift 2 ;;
+            --client) CLIENT_NAME="$2"; shift 2 ;;
+            --user) USERNAME="$2"; shift 2 ;;
+            --pass) PASSWORD="$2"; shift 2 ;;
+            --uninstall) uninstall_all; exit 0 ;;
+            --get-ovpn) get_ovpn_file "$2"; exit 0 ;;
+            --help|-h) show_help; exit 0 ;;
+            *) err "Unknown option: $1"; show_help; exit 1 ;;
+        esac
+    done
+}
+
+show_help() {
+    cat <<EOF
+OpenVPN Wizard v${VERSION} - Hardened OpenVPN over TCP/443 with HAProxy
+
+Usage: $0 [OPTIONS]
+
+Options:
+  --quick, -q              Quick install with defaults (no prompts)
+  --domain DOMAIN          Set domain (default: cf.mhhdns.online)
+  --ip IP                  Set server IP (default: auto-detect)
+  --client NAME            Client name (default: 01-JH)
+  --user USER              Username (default: MHH06)
+  --pass PASS              Password (default: auto-generated)
+  --uninstall              Complete uninstall (clean removal)
+  --get-ovpn NAME          Get OVPN file for client
+  --help, -h               Show this help
+
+Examples:
+  $0 --quick                           # Quick install with defaults
+  $0 --domain vpn.example.com --ip 1.2.3.4
+  $0 --uninstall                       # Complete clean uninstall
+  $0 --get-ovpn 02-JH                  # Get OVPN file for client
+
+Management Commands (after install):
+  ovpn-add-client <name>     - Add new client
+  ovpn-revoke-client <name>  - Revoke client
+  ovpn-list-clients          - List all clients
+  ovpn-status                - Show status
+  ovpn-get-ovpn <name>       - Get OVPN file with QR code
+  ovpn-uninstall             # Complete uninstall
+EOF
+}
+
+# Uninstall everything
+uninstall_all() {
+    step "Uninstalling OpenVPN Wizard (Complete Clean Removal)"
+    
+    # Stop services
+    log "Stopping services..."
+    systemctl stop openvpn-server@server 2>/dev/null || true
+    systemctl stop openvpn-server@warp1194-tcp 2>/dev/null || true
+    systemctl stop openvpn-server@warp1194-udp 2>/dev/null || true
+    systemctl stop haproxy 2>/dev/null || true
+    
+    # Disable services
+    systemctl disable openvpn-server@server 2>/dev/null || true
+    systemctl disable haproxy 2>/dev/null || true
+    
+    # Remove systemd overrides
+    rm -rf /etc/systemd/system/openvpn-server@.service.d
+    rm -f /etc/systemd/system/openvpn-client@.service
+    systemctl daemon-reload
+    
+    # Remove packages
+    log "Removing packages..."
+    apt-get remove -y openvpn easy-rsa haproxy iptables-persistent ufw fail2ban 2>/dev/null || true
+    apt-get autoremove -y 2>/dev/null || true
+    
+    # Remove configs
+    log "Removing configurations..."
+    rm -rf /etc/openvpn
+    rm -rf /etc/haproxy
+    rm -rf /etc/openvpn/easy-rsa
+    rm -rf /etc/sysctl.d/99-openvpn-wizard.conf
+    rm -rf /etc/sysctl.d/99-bbr.conf
+    rm -rf /etc/sysctl.d/99-buffers.conf
+    
+    # Remove firewall rules
+    iptables -t nat -D POSTROUTING -s 10.9.0.0/24 -o eth0 -j MASQUERADE 2>/dev/null || true
+    iptables -t nat -D POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE 2>/dev/null || true
+    iptables -D FORWARD -i tun+ -o eth0 -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -i eth0 -o tun+ -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
+    iptables -D FORWARD -i tun+ -o tun+ -j ACCEPT 2>/dev/null || true
+    netfilter-persistent save 2>/dev/null || true
+    
+    # Remove UFW
+    ufw --force reset >/dev/null 2>&1 || true
+    ufw --force disable >/dev/null 2>&1 || true
+    
+    # Remove management scripts
+    rm -f /usr/local/bin/ovpn-*
+    
+    # Remove client configs
+    rm -f /root/*.ovpn
+    rm -rf /root/.hermes/cache/scratch/*.ovpn
+    
+    # Remove scripts
+    rm -f /root/openvpn-wizard-termux.sh
+    rm -f /root/openvpn-wizard-linux.sh
+    
+    # Remove easy-rsa
+    rm -rf /etc/openvpn/easy-rsa
+    
+    # Remove logs
+    rm -f /var/log/openvpn*.log
+    rm -f /var/log/openvpn-status.log
+    
+    ok "Complete uninstall finished. System is clean."
+    exit 0
+}
+
+# Get OVPN file for client
+get_ovpn_file() {
+    local client_name="${1:-$CLIENT_NAME}"
+    local output_file="/root/${client_name}-${SERVER_IP}.ovpn"
+    
+    if [[ ! -f "/etc/openvpn/easy-rsa/pki/issued/${client_name}.crt" ]]; then
+        err "Client ${client_name} not found. Use 'ovpn-list-clients' to see available clients."
+        exit 1
+    fi
+    
+    step "Generating OVPN file for ${client_name}"
+    
+    cat > "${output_file}" <<EOF
+client
+dev tun
+proto tcp4-client
+remote ${SERVER_IP} 443
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+verify-x509-name server name
+cipher ${CIPHER}
+auth ${AUTH}
+auth-user-pass
+auth-nocache
+explicit-exit-notify 1
+verb 3
+mute 10
+keepalive 10 60
+tun-mtu 1500
+mssfix 1360
+sndbuf 524288
+rcvbuf 524288
+txqueuelen 1000
+reneg-sec 0
+mute-replay-warnings
+persist-remote-ip
+
+<ca>
+$(cat /etc/openvpn/easy-rsa/pki/ca.crt)
+</ca>
+
+<cert>
+$(cat /etc/openvpn/easy-rsa/pki/issued/${client_name}.crt)
+</cert>
+
+<key>
+$(cat /etc/openvpn/easy-rsa/pki/private/${client_name}.key)
+</key>
+
+<tls-crypt-v2>
+$(cat /etc/openvpn/server/tls-crypt-v2-${client_name}.key)
+</tls-crypt-v2>
+EOF
+
+    # Generate QR code for easy mobile import
+    if command -v qrencode >/dev/null 2>&1; then
+        qrencode -t UTF8 < "${output_file}" 2>/dev/null || true
+    fi
+    
+    ok "OVPN file generated: ${output_file}"
+    info "Username: ${USERNAME}"
+    info "Password: ${PASSWORD}"
+    exit 0
+}
+
 # Update system
 update_system() {
     step "Updating system packages"
@@ -109,7 +303,7 @@ install_deps() {
         openvpn easy-rsa haproxy iptables iptables-persistent
         conntrack net-tools iproute2 curl wget gnupg2
         software-properties-common ca-certificates
-        ufw fail2ban logrotate rsyslog
+        ufw fail2ban logrotate rsyslog qrencode
     )
     apt-get install -y -qq "${pkgs[@]}" &
     spinner $! "Installing packages"
@@ -571,205 +765,147 @@ echo "show stat" | socat stdio /run/haproxy/admin.sock 2>/dev/null | grep -E "op
 EOF
     chmod +x /usr/local/bin/ovpn-status
     
+    # New: Get OVPN file with QR code
+    cat > /usr/local/bin/ovpn-get-ovpn <<'EOF'
+#!/usr/bin/env bash
+# Get OVPN file for client with QR code
+set -euo pipefail
+CLIENT_NAME="${1:-}"
+[[ -z "$CLIENT_NAME" ]] && { echo "Usage: ovpn-get-ovpn <name>"; exit 1; }
+
+CONFIG_DIR="/etc/openvpn"
+SERVER_IP=$(curl -s ifconfig.me)
+OUTPUT_FILE="/root/${CLIENT_NAME}-${SERVER_IP}.ovpn"
+
+if [[ ! -f "${CONFIG_DIR}/easy-rsa/pki/issued/${CLIENT_NAME}.crt" ]]; then
+    echo "Client ${CLIENT_NAME} not found. Use 'ovpn-list-clients' to see available clients."
+    exit 1
+fi
+
+cat > "${OUTPUT_FILE}" <<OVPEOF
+client
+dev tun
+proto tcp4-client
+remote ${SERVER_IP} 443
+resolv-retry infinite
+nobind
+persist-key
+persist-tun
+remote-cert-tls server
+verify-x509-name server name
+cipher AES-256-GCM
+auth SHA256
+auth-user-pass
+auth-nocache
+explicit-exit-notify 1
+verb 3
+mute 10
+keepalive 10 60
+tun-mtu 1500
+mssfix 1360
+sndbuf 524288
+rcvbuf 524288
+txqueuelen 1000
+reneg-sec 0
+mute-replay-warnings
+persist-remote-ip
+
+<ca>
+$(cat /etc/openvpn/easy-rsa/pki/ca.crt)
+</ca>
+
+<cert>
+$(cat /etc/openvpn/easy-rsa/pki/issued/${CLIENT_NAME}.crt)
+</cert>
+
+<key>
+$(cat /etc/openvpn/easy-rsa/pki/private/${CLIENT_NAME}.key)
+</key>
+
+<tls-crypt-v2>
+$(cat /etc/openvpn/server/tls-crypt-v2-${CLIENT_NAME}.key)
+</tls-crypt-v2>
+OVPEOF
+
+# Generate QR code
+if command -v qrencode >/dev/null 2>&1; then
+    echo ""
+    echo "=== QR Code for Mobile Import ==="
+    qrencode -t UTF8 < "${OUTPUT_FILE}" 2>/dev/null || true
+fi
+
+echo "OVPN file: ${OUTPUT_FILE}"
+echo "Username: $(grep USERNAME /root/openvpn-wizard/config 2>/dev/null | cut -d= -f2 || echo 'MHH06')"
+echo "Password: $(grep PASSWORD /root/openvpn-wizard/config 2>/dev/null | cut -d= -f2 || echo 'S271m31h41')"
+EOF
+    chmod +x /usr/local/bin/ovpn-get-ovpn
+    
+    # New: Uninstall script
+    cat > /usr/local/bin/ovpn-uninstall <<'EOF'
+#!/usr/bin/env bash
+# Complete uninstall
+curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash -s -- --uninstall
+EOF
+    chmod +x /usr/local/bin/ovpn-uninstall
+    
     ok "Management scripts created"
 }
 
-# Create Termux install script
-create_termux_script() {
-    step "Creating Termux install script"
+# Quick install mode
+quick_install() {
+    step "Quick Install Mode - Auto-configuring with defaults"
+    info "Domain: ${DOMAIN}"
+    info "Server IP: ${SERVER_IP}"
+    info "Client: ${CLIENT_NAME}"
+    info "User: ${USERNAME}"
+    info "Password: ${PASSWORD}"
+    echo ""
     
-    cat > /root/openvpn-wizard-termux.sh <<'TERMUXEOF'
-#!/data/data/com.termux/files/usr/bin/bash
-# OpenVPN Wizard - Termux ARM64 Client Setup
-# Run this on Android Termux to auto-configure OpenVPN
-
-set -euo pipefail
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-log() { echo -e "${BLUE}[${NC}$(date '+%H:%M:%S')${BLUE}]${NC} $*"; }
-ok()  { echo -e "${GREEN}[✓]${NC} $*"; }
-warn(){ echo -e "${YELLOW}[!]${NC} $*"; }
-err() { echo -e "${RED}[✗]${NC} $*"; }
-step(){ echo -e "\n${CYAN}▶${NC} ${BOLD}$*${NC}\n"; }
-
-# Check if running in Termux
-if [[ ! -d "/data/data/com.termux" ]]; then
-    err "This script must run in Termux on Android"
-    exit 1
-fi
-
-step "OpenVPN Wizard - Termux Client Setup"
-
-# Update packages
-log "Updating Termux packages..."
-pkg update -y && pkg upgrade -y
-
-# Install OpenVPN
-log "Installing OpenVPN..."
-pkg install -y openvpn openssl curl wget
-
-# Create config directory
-mkdir -p ~/.openvpn
-
-# Download config from server (adjust URL as needed)
-CONFIG_URL="https://your-server.com/01-JH-192.209.62.112.ovpn"
-log "Downloading OpenVPN config..."
-if curl -fsSL "$CONFIG_URL" -o ~/.openvpn/client.ovpn; then
-    ok "Config downloaded"
-else
-    warn "Could not download config. Please copy your .ovpn file to ~/.openvpn/client.ovpn manually"
-fi
-
-# Create shortcuts
-cat > ~/.shortcuts/openvpn-connect <<'SHORTCUT'
-#!/data/data/com.termux/files/usr/bin/bash
-# OpenVPN Connect Shortcut
-cd ~/.openvpn
-sudo openvpn --config client.ovpn --auth-user-pass <(echo -e "MHH06\nS271m31h41")
-SHORTCUT
-chmod +x ~/.shortcuts/openvpn-connect
-
-cat > ~/.shortcuts/openvpn-disconnect <<'SHORTCUT'
-#!/data/data/com.termux/files/usr/bin/bash
-sudo pkill -f "openvpn.*client.ovpn"
-echo "Disconnected"
-SHORTCUT
-chmod +x ~/.shortcuts/openvpn-disconnect
-
-ok "Termux setup complete!"
-echo ""
-echo "Usage:"
-echo "  Connect:   openvpn-connect"
-echo "  Disconnect: openvpn-disconnect"
-echo "  Config:    ~/.openvpn/client.ovpn"
-TERMUXEOF
-    chmod +x /root/openvpn-wizard-termux.sh
-    ok "Termux script created"
+    update_system
+    install_deps
+    configure_kernel
+    generate_certs
+    configure_openvpn
+    configure_haproxy
+    configure_firewall
+    generate_client_config
+    create_management_scripts
+    verify_installation
+    print_summary
 }
 
-# Create Linux client installer
-create_linux_client_script() {
-    step "Creating Linux amd64 client installer"
+# Full interactive install
+full_install() {
+    step "Interactive Install Mode"
     
-    cat > /root/openvpn-wizard-linux.sh <<'LINUXEOF'
-#!/usr/bin/env bash
-# OpenVPN Wizard - Linux AMD64 Client Auto-Installer
-# Run as root: curl -fsSL https://your-server.com/openvpn-wizard-linux.sh | bash
-
-set -euo pipefail
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
-
-log() { echo -e "${BLUE}[${NC}$(date '+%H:%M:%S')${BLUE}]${NC} $*"; }
-ok()  { echo -e "${GREEN}[✓]${NC} $*"; }
-warn(){ echo -e "${YELLOW}[!]${NC} $*"; }
-err() { echo -e "${RED}[✗]${NC} $*"; }
-step(){ echo -e "\n${CYAN}▶${NC} ${BOLD}$*${NC}\n"; }
-
-[[ $EUID -ne 0 ]] && { err "Run as root"; exit 1; }
-
-SERVER_IP="192.209.62.112"
-CLIENT_NAME="01-JH"
-CONFIG_URL="https://${SERVER_IP}/${CLIENT_NAME}-${SERVER_IP}.ovpn"
-CONFIG_DIR="/etc/openvpn"
-CONFIG_FILE="${CONFIG_DIR}/client.conf"
-
-step "OpenVPN Wizard - Linux Client Auto-Install"
-
-# Detect distro
-if [[ -f /etc/os-release ]]; then
-    . /etc/os-release
-    log "Detected: $PRETTY_NAME"
-else
-    err "Cannot detect OS"
-    exit 1
-fi
-
-# Install OpenVPN
-step "Installing OpenVPN"
-case $ID in
-    ubuntu|debian) apt-get update -qq && apt-get install -y -qq openvpn resolvconf ;;
-    fedora|rhel|centos|rocky|almalinux) dnf install -y openvpn ;;
-    arch|manjaro) pacman -Sy --noconfirm openvpn ;;
-    *) err "Unsupported distro: $ID"; exit 1 ;;
-esac
-ok "OpenVPN installed"
-
-# Download config
-step "Downloading configuration"
-mkdir -p "$CONFIG_DIR"
-if curl -fsSL "$CONFIG_URL" -o "$CONFIG_FILE"; then
-    ok "Config downloaded to $CONFIG_FILE"
-else
-    err "Failed to download config from $CONFIG_URL"
-    exit 1
-fi
-
-# Create systemd service
-step "Creating systemd service"
-cat > /etc/systemd/system/openvpn-client@.service <<EOF
-[Unit]
-Description=OpenVPN Client (%i)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=notify
-PrivateTmp=true
-ExecStart=/usr/sbin/openvpn --config %i --auth-user-pass /etc/openvpn/auth.txt
-Restart=on-failure
-RestartSec=10
-KillMode=process
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Create auth file
-cat > /etc/openvpn/auth.txt <<EOF
-MHH06
-S271m31h41
-EOF
-chmod 600 /etc/openvpn/auth.txt
-
-# Enable and start
-systemctl daemon-reload
-systemctl enable openvpn-client@client
-systemctl start openvpn-client@client
-
-ok "OpenVPN client service started"
-
-# Verify connection
-sleep 3
-if ip addr show tun0 >/dev/null 2>&1; then
-    ok "VPN connected! Interface: tun0"
-    ip addr show tun0 | grep inet
-else
-    warn "VPN may not be connected yet. Check: journalctl -u openvpn-client@client -f"
-fi
-
-echo ""
-echo "=== Management ==="
-echo "  Status:  systemctl status openvpn-client@client"
-echo "  Logs:    journalctl -u openvpn-client@client -f"
-echo "  Stop:    systemctl stop openvpn-client@client"
-echo "  Restart: systemctl restart openvpn-client@client"
-LINUXEOF
-    chmod +x /root/openvpn-wizard-linux.sh
-    ok "Linux installer created"
+    # Auto-detect IP if not set
+    if [[ -z "${SERVER_IP}" || "${SERVER_IP}" == "192.209.62.112" ]]; then
+        SERVER_IP=$(curl -s ifconfig.me || curl -s icanhazip.com || echo "192.209.62.112")
+    fi
+    
+    # Generate secure password if not set
+    if [[ "${PASSWORD}" == "S271m31h41" ]]; then
+        PASSWORD=$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-16)
+    fi
+    
+    echo -e "${CYAN}Configuration:${NC}"
+    echo "  Domain: ${DOMAIN}"
+    echo "  Server IP: ${SERVER_IP}"
+    echo "  Client: ${CLIENT_NAME}"
+    echo "  Username: ${USERNAME}"
+    echo "  Password: ${PASSWORD}"
+    echo ""
+    
+    if [[ "${QUICK_INSTALL}" != "true" ]]; then
+        read -p "Continue with these settings? [Y/n] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Nn]$ ]]; then
+            err "Installation cancelled"
+            exit 1
+        fi
+    fi
+    
+    quick_install
 }
 
 # Verify installation
@@ -799,7 +935,7 @@ verify_installation() {
     
     # Port 443
     ((checks++))
-    if ss -tlnp | grep -q ":443.*haproxy"; then
+    if ss -tlnp | grep -q ':443.*haproxy'; then
         ((passed++))
         ok "Port 443: listening"
     else
@@ -808,7 +944,7 @@ verify_installation() {
     
     # Port 1194
     ((checks++))
-    if ss -tlnp | grep -q ":1194.*openvpn"; then
+    if ss -tlnp | grep -q ':1194.*openvpn'; then
         ((passed++))
         ok "Port 1194: listening"
     else
@@ -833,6 +969,15 @@ verify_installation() {
         err "Client config: missing"
     fi
     
+    # Management scripts
+    ((checks++))
+    if [[ -x /usr/local/bin/ovpn-add-client && -x /usr/local/bin/ovpn-get-ovpn && -x /usr/local/bin/ovpn-uninstall ]]; then
+        ((passed++))
+        ok "Management scripts: installed"
+    else
+        err "Management scripts: missing"
+    fi
+    
     echo ""
     if [[ $passed -eq $checks ]]; then
         ok "All $checks checks passed!"
@@ -847,7 +992,7 @@ verify_installation() {
 print_summary() {
     echo ""
     echo -e "${MAGENTA}╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${MAGENTA}║${NC}  ${BOLD}OpenVPN Wizard - Installation Complete${NC}                    ${MAGENTA}║${NC}"
+    echo -e "${MAGENTA}║${NC}  ${BOLD}OpenVPN Wizard v${VERSION} - Installation Complete${NC}                    ${MAGENTA}║${NC}"
     echo -e "${MAGENTA}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "${BOLD}Server:${NC} $SERVER_IP"
@@ -866,10 +1011,12 @@ print_summary() {
     echo "  /root/.hermes/cache/scratch/${CLIENT_NAME}-${SERVER_IP}.ovpn"
     echo ""
     echo -e "${BOLD}Management Commands:${NC}"
-    echo "  ovpn-add-client <name>     - Add new client"
-    echo "  ovpn-revoke-client <name>  - Revoke client"
-    echo "  ovpn-list-clients          - List all clients"
-    echo "  ovpn-status                - Show status"
+    echo "  ovpn-add-client <name>      - Add new client"
+    echo "  ovpn-revoke-client <name>   - Revoke client"
+    echo "  ovpn-list-clients           - List all clients"
+    echo "  ovpn-status                 - Show status"
+    echo "  ovpn-get-ovpn <name>        - Get OVPN file with QR code"
+    echo "  ovpn-uninstall              - Complete uninstall"
     echo ""
     echo -e "${BOLD}Termux (Android):${NC}"
     echo "  /root/openvpn-wizard-termux.sh"
@@ -877,11 +1024,22 @@ print_summary() {
     echo -e "${BOLD}Linux Client Auto-Install:${NC}"
     echo "  /root/openvpn-wizard-linux.sh"
     echo ""
+    echo -e "${BOLD}Quick Commands:${NC}"
+    echo "  Get OVPN:  ovpn-get-ovpn <client-name>"
+    echo "  Uninstall: ovpn-uninstall"
+    echo ""
     echo -e "${GREEN}Installation complete!${NC} Copy the .ovpn file to your device."
+    echo ""
+    echo -e "${CYAN}=== QR Code for Mobile Import ===${NC}"
+    if command -v qrencode >/dev/null 2>&1; then
+        qrencode -t UTF8 < "/root/${CLIENT_NAME}-${SERVER_IP}.ovpn" 2>/dev/null || true
+    fi
 }
 
 # Main
 main() {
+    parse_args "$@"
+    
     clear
     echo -e "${MAGENTA}"
     cat <<'EOF'
@@ -892,29 +1050,17 @@ main() {
     ██║  ██║██║  ██║███████╗███████╗██║  ██║███████╗██████╔╝
     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝╚═════╝ 
                                                             
-    OpenVPN Wizard — Hardened TCP/443 over HAProxy
+    OpenVPN Wizard v1.1.0 — Hardened TCP/443 over HAProxy
 EOF
     echo -e "${NC}"
     
     check_root
     detect_os
-    update_system
-    install_deps
-    configure_kernel
-    generate_certs
-    configure_openvpn
-    configure_haproxy
-    configure_firewall
-    generate_client_config
-    create_management_scripts
-    create_termux_script
-    create_linux_client_script
     
-    if verify_installation; then
-        print_summary
+    if [[ "${QUICK_INSTALL}" == "true" ]]; then
+        quick_install
     else
-        err "Installation completed with errors. Check logs."
-        exit 1
+        full_install
     fi
 }
 
