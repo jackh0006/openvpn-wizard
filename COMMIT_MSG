@@ -1,0 +1,43 @@
+OpenVPN Wizard v1.0.0 - Hardened OpenVPN over TCP/443 with HAProxy SNI multiplexing
+
+Security Features:
+- TLS 1.3 only (AES-256-GCM, CHACHA20-POLY1305)
+- tls-crypt-v2 post-quantum control channel encryption
+- ECDSA/secp384r1 certificates (192-bit classical security)
+- No compression (VORACLE resistant)
+- No renegotiation (prevents key rollback)
+- IPv6 blocking + DNS leak prevention
+
+DPI Evasion:
+- HAProxy SNI multiplexing on port 443
+- OpenVPN traffic indistinguishable from HTTPS
+- TCP/443 bypasses all port blocking
+- No OpenVPN fingerprint on wire
+
+Performance:
+- BBR congestion control
+- 512KB socket buffers
+- MTU 1500 / MSS 1360
+- 2M concurrent connections
+
+Universal Clients:
+- Linux AMD64 auto-installer (systemd)
+- Android Termux ARM64 auto-installer
+- iOS/macOS/Windows via OpenVPN Connect
+- Single .ovpn file with all certs inline
+
+Management:
+- ovpn-add-client / ovpn-revoke-client / ovpn-list-clients / ovpn-status
+- HAProxy stats dashboard
+- Full systemd hardening
+
+Documentation:
+- ARCHITECTURE.md - Full system diagram
+- SECURITY.md - Threat model, crypto, DPI evasion
+- TROUBLESHOOTING.md - 10 common issues
+- TERMUX.md - Android guide
+
+Tested and Working:
+- 25+ integration tests
+- Auto-installers for Linux/Termux
+- Production-ready configs
