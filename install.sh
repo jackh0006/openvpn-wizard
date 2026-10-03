@@ -304,14 +304,18 @@ install_deps() {
     echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections
     echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | debconf-set-selections
     
+    # Pre-seed for pending kernel upgrade dialog
+    echo "linux-base linux-base/removable_media boolean false" | debconf-set-selections
+    echo "linux-base linux-base/upgrade_kernel boolean true" | debconf-set-selections
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq linux-base 2>&1 | while read line; do echo -e "${DIM}[STREAM]${NC} $line"; done
+    
     local pkgs=(
         openvpn easy-rsa haproxy iptables iptables-persistent
         conntrack net-tools iproute2 curl wget gnupg2
         software-properties-common ca-certificates
         ufw fail2ban logrotate rsyslog qrencode
     )
-    apt-get install -y -qq "${pkgs[@]}" &
-    spinner $! "Installing packages"
+    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs[@]}" 2>&1 | while read line; do echo -e "${DIM}[STREAM]${NC} $line"; done
     ok "Dependencies installed"
 }
 
