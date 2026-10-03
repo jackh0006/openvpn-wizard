@@ -299,6 +299,11 @@ update_system() {
 # Install dependencies
 install_deps() {
     step "Installing dependencies"
+    
+    # Pre-seed debconf for iptables-persistent to avoid interactive prompts
+    echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections
+    echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | debconf-set-selections
+    
     local pkgs=(
         openvpn easy-rsa haproxy iptables iptables-persistent
         conntrack net-tools iproute2 curl wget gnupg2
