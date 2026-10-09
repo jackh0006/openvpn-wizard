@@ -22,7 +22,7 @@ jobs:
           for f in install.sh openvpn-wizard-linux.sh openvpn-wizard-termux.sh tests/integration.sh; do
             bash -n "$f" || exit 1
           done
-      - uses: koalaman/shellcheck@v0.11.0
+      - uses: ludeeus/action-shellcheck@2.0.0
         with:
           severity: error
       - name: Build canonical assets
