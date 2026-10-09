@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: MIT
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Shell syntax + shellcheck
+        run: |
+          for f in install.sh openvpn-wizard-linux.sh openvpn-wizard-termux.sh tests/integration.sh; do
+            bash -n "$f" || exit 1
+          done
+      - uses: koalaman/shellcheck@v2
+        with:
+          severity: error
+      - name: Build canonical assets
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          git archive --format=tar.gz --prefix="openvpn-wizard-$VER/" HEAD -o "openvpn-wizard-$VER-linux-all.tar.gz"
+          sha256sum "openvpn-wizard-$VER-linux-all.tar.gz" > "openvpn-wizard-$VER-SHA256SUMS.txt"
+      - name: Publish (only on your tag, under your auth)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" --clobber "openvpn-wizard-$VER-linux-all.tar.gz" "openvpn-wizard-$VER-SHA256SUMS.txt"
+          else
+            gh release create "${GITHUB_REF_NAME}" --title "OpenVPN Wizard ${GITHUB_REF_NAME}" --generate-notes "openvpn-wizard-$VER-linux-all.tar.gz" "openvpn-wizard-$VER-SHA256SUMS.txt"
+          fi

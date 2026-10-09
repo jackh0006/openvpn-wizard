@@ -1,4 +1,4 @@
-# OpenVPN Wizard v1.1.0
+# OpenVPN Wizard
 
 <p align="center">
   <img src="assets/logo.svg" alt="OpenVPN Wizard" width="200"/>
@@ -75,6 +75,25 @@ curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/insta
 # Interactive (with prompts)
 curl -fsSL https://raw.githubusercontent.com/Jackh0006/openvpn-wizard/main/install.sh | sudo bash
 ```
+
+> 🔍 Prefer to inspect first? `git clone https://github.com/jackh0006/openvpn-wizard.git`,
+> read `install.sh`, then run `sudo bash install.sh --quick`. Same script, no pipe.
+
+## 🔒 Why this wizard — scoreboard
+
+Same goal, reproducible. Legend: ✅ yes · ❌ no · 🔶 partial.
+
+| Need (your words) | OpenVPN Wizard | Manual OpenVPN setup | Consumer VPN app | How we prove it |
+| --- | :---: | :---: | :---: | --- |
+| 🚀 One command, zero prompts | ✅ `--quick` | ❌ hours | ✅ | `install.sh --help` + `tests/integration.sh` |
+| 🕵️ Looks like normal HTTPS (`:443`) | ✅ SNI multiplex + decoy | ❌ fingerprintable | 🔶 | HAProxy SNI routing; see `docs/SECURITY.md` threat model |
+| 🔐 Modern crypto by default | ✅ TLS 1.3 + `tls-crypt-v2` | 🔶 depends on you | 🔶 | `templates/server.conf`, audited OpenVPN upstream |
+| 🧱 Firewall deny-by-default | ✅ UFW + NAT | ❌ on you | — | Installer output + `docs/ARCHITECTURE.md` |
+| 📱 Linux + Termux clients | ✅ | 🔶 | ✅ | `openvpn-wizard-linux.sh`, `-termux.sh` |
+| 🕵️ Invisible to DPI / provider | ❌ raises cost only | ❌ | ❌ | Honest limits: `docs/SECURITY.md`, `PRIVACY.md` |
+| 🔍 Independent audit | 🔶 open, needs audit | — | ✅ big ones | `SECURITY.md` |
+
+What only it does: single-script hardened stack (BBR, PKI, HAProxy multiplexing, `ovpn-*` management CLI, Termux QR client) with zero prompts. What you need: Ubuntu 22.04+/Debian 12+ VPS, a domain for stealth mode, and realistic expectations: your provider still sees sizes/timing. No hype — see `docs/SECURITY.md`.
 
 **That's it.** The script:
 1. Updates system & installs dependencies
@@ -375,5 +394,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 <p align="center">
   Made with ❤️ for privacy and freedom<br>
-  <strong>OpenVPN Wizard v1.1.0</strong> — The easiest, most secure way to deploy OpenVPN
+  <strong>OpenVPN Wizard</strong> — The easy, hardened way to deploy OpenVPN
 </p>

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT
+name: Strict boundary
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  strict:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan
+        run: |
+          grep -rn --exclude-dir=.git -E 'BEGIN (RSA |OPENSSH |EC )?PRIVATE KEY' . --include='*.sh' --include='*.md' --include='*.conf' --include='*.cfg' --include='*.ovpn' --include='*.yaml' --include='*.yml' && { echo "private key material forbidden"; exit 1; }
+          grep -rniE 'ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}' . --exclude-dir=.git && { echo "token forbidden"; exit 1; }
+          echo "secrets: none found OK"
+      - name: No unverifiable claims
+        run: |
+          grep -rin 'unhackable\|NSA-proof\|zero bugs\|guaranteed anonymous\|100% anonymous\|fully undetectable' README.md SECURITY.md PRIVACY.md docs/ install.sh 2>/dev/null | grep -vi 'never\|no \|not \|raises\|honest' && { echo "hype claim forbidden"; exit 1; }
+          echo "claims: honest OK"
+      - name: Version-proof texts
+        run: |
+          grep -rn 'v1\.1\.0\|v1\.0\.0' README.md SECURITY.md PRIVACY.md AGENTS.md PUBLISHING.md 2>/dev/null && { echo "hardcoded version forbidden (use current stable + Releases page)"; exit 1; }
+          echo "texts: version-proof OK"
