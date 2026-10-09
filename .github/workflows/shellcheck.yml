@@ -20,7 +20,7 @@ jobs:
           done
           echo "bash -n: OK"
       - name: shellcheck
-        uses: koalaman/shellcheck@v1
+        uses: koalaman/shellcheck@v0.11.0
         with:
           severity: error
           check_together: 'yes'
