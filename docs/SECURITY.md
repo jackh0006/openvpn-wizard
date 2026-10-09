@@ -10,11 +10,12 @@
 | **Active Attacker** | MITM, certificate spoofing, replay, injection | Intercept/modify traffic |
 | **Quantum Computer** | Shor's algorithm, Grover's algorithm | Break asymmetric crypto |
 
-### Assets Protected
-- User identity and location
-- Traffic content and metadata
-- DNS queries
-- Connection timestamps and patterns
+### Assets Protected (from local networks / ISPs — NOT from your VPS provider)
+- Traffic content (from anyone except the tunnel endpoints)
+- DNS queries (when pushed through the tunnel)
+- User identity and location (from local network observers only)
+- NOT protected: traffic sizes/timing/destinations from the VPS provider;
+  connection timestamps they log; see PRIVACY.md
 
 ---
 
@@ -31,7 +32,7 @@
 │  Cipher Suite: TLS_CHACHA20_POLY1305_SHA256                    │
 │  Cipher Suite: TLS_AES_128_GCM_SHA256                          │
 ├─────────────────────────────────────────────────────────────────┤
-│  tls-crypt-v2 (Post-Quantum Resistant Control Channel)         │
+│  tls-crypt-v2 (symmetric pre-shared control channel, AES-256 —      │
 │  ├─ Key Derivation: HKDF-SHA256                                │
 │  ├─ Encryption:   AES-256-CTR + HMAC-SHA256                    │
 │  ├─ Replay Protection: 64-bit sequence numbers                 │
