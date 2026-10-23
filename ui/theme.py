@@ -75,6 +75,7 @@ THEME = Theme({
     "title": f"bold {COLORS['primary']}",
     "subtitle": f"{COLORS['text_muted']}",
     "divider": COLORS['border'],
+    "border": COLORS['border'],
 })
 
 
