@@ -170,11 +170,21 @@ else
     "$VENV_DIR/bin/pip" install -e .
 fi
 
-# ── Step 8: Create Symlink ────────────────────────────────────────
+# ── Step 8: Create Command Wrapper ─────────────────────────────────
 echo ""
-echo "🔗 Creating command symlink..."
-ln -sf "$VENV_DIR/bin/vpn-installer" /usr/local/bin/vpn-installer
-echo "   ✓ Linked /usr/local/bin/vpn-installer → $VENV_DIR/bin/vpn-installer"
+echo "🔗 Creating command wrapper..."
+# Find the venv site-packages directory dynamically
+VENV_SITE_PACKAGES=$("$VENV_DIR/bin/python" -c "import site; print(site.getsitepackages()[0])")
+cat > /usr/local/bin/vpn-installer << WRAPPER_EOF
+#!/usr/bin/env python3
+import sys
+sys.path.insert(0, '$VENV_SITE_PACKAGES')
+sys.path.insert(0, '$CLONE_DIR')
+from cli import app
+app()
+WRAPPER_EOF
+chmod +x /usr/local/bin/vpn-installer
+echo "   ✓ Created /usr/local/bin/vpn-installer"
 
 # ── Step 9: Verify ────────────────────────────────────────────────
 echo ""
