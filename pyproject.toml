@@ -51,11 +51,11 @@ dev = [
 ]
 
 [project.scripts]
-vpn-installer = "installer.__main__:app"
+vpn-installer = "__main__:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["installer*"]
+include = ["core", "ui", "steps", "management", "privacy", "validation", "utils"]
 
 [tool.black]
 line-length = 100
