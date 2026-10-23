@@ -51,6 +51,21 @@ echo "📦 Checking Python 3..."
 if cmd_exists python3; then
     PYTHON_VER=$(python3 --version 2>&1)
     echo "   ✓ Python 3 found: $PYTHON_VER"
+    # Check Python version (need >= 3.10)
+    PYTHON_MAJOR=$(python3 -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo "0")
+    PYTHON_MINOR=$(python3 -c "import sys; print(sys.version_info.minor)" 2>/dev/null || echo "0")
+    if [ "$PYTHON_MAJOR" -lt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 10 ]; }; then
+        echo ""
+        echo "❌ ERROR: Python 3.10+ is required, but found $PYTHON_VER"
+        echo "   Please upgrade Python or use a newer Ubuntu version (22.04+ has 3.10)"
+        exit 1
+    fi
+    if [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -lt 11 ]; then
+        echo ""
+        echo "⚠️  NOTE: Python $PYTHON_MAJOR.$PYTHON_MINOR detected (minimum 3.10 required)"
+        echo "   Some features may be limited. Continuing anyway..."
+        echo ""
+    fi
     if ! ask_continue "Python 3"; then
         SKIP_PYTHON=1
     fi
