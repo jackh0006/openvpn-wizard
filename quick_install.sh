@@ -114,6 +114,11 @@ fi
 REPO_URL="https://github.com/jackh0006/openvpn-wizard.git"
 CLONE_DIR="/tmp/openvpn-wizard"
 
+# Move to a stable directory first - users often run this script FROM
+# the clone dir (git clone ... && cd ...), and removing our own CWD
+# would break git clone with "Unable to read current working directory"
+cd / 2>/dev/null || cd /root 2>/dev/null || true
+
 echo ""
 echo "📥 Cloning repository..."
 echo "   From: $REPO_URL"
