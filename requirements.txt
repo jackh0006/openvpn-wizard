@@ -1,0 +1,24 @@
+# Core dependencies
+rich>=13.7.0
+textual>=0.44.0
+typer>=0.9.0
+jinja2>=3.1.0
+
+# Cryptography
+cryptography>=42.0.0
+
+# System
+psutil>=5.9.0
+
+# Network
+requests>=2.31.0
+
+# QR code (optional)
+qrcode>=7.4.0
+
+# Development
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+black>=23.0.0
+ruff>=0.1.0
+mypy>=1.5.0

@@ -1,0 +1,35 @@
+# Code Owners
+
+# These are the maintainers who review changes to specific parts of the codebase
+
+# Core infrastructure
+/installer/core/ @jackh0006
+
+# UI components
+/installer/ui/ @jackh0006
+
+# Installation steps
+/installer/steps/ @jackh0006
+
+# User management
+/installer/management/ @jackh0006
+
+# Privacy explanations
+/installer/privacy/ @jackh0006
+
+# Validation
+/installer/validation/ @jackh0006
+
+# Utilities
+/installer/utils/ @jackh0006
+
+# Templates
+/installer/templates/ @jackh0006
+
+# Documentation
+/docs/ @jackh0006
+
+# Configuration files
+/installer/pyproject.toml @jackh0006
+/installer/requirements.txt @jackh0006
+/installer/quick_install.sh @jackh0006

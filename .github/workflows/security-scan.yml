@@ -1,0 +1,29 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+  push:
+    branches: [ main, master ]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Run safety check for vulnerable dependencies
+      run: |
+        pip install safety
+        safety check -r installer/requirements.txt --json || true
+
+    - name: Run bandit for security issues
+      run: |
+        pip install bandit
+        bandit -r installer/ -f json -o bandit-report.json || true
+        bandit -r installer/ -lll || true
+
+    - name: Check for secrets
+      run: |
+        pip install detect-secrets
+        detect-secrets scan --baseline .secrets.baseline installer/ || true

@@ -1,0 +1,36 @@
+{
+  "port": {{ port }},
+  "listen": "{{ listen }}",
+  "protocol": "vless",
+  "settings": {
+    "clients": [
+      {
+        "id": "{{ uuid }}",
+        "flow": "xtls-rprx-vision"
+      }
+    ],
+    "decryption": "none"
+  },
+  "streamSettings": {
+    "network": "xhttp",
+    "security": "tls",
+    "tlsSettings": {
+      "alpn": ["h2", "http/1.1"],
+      "certificates": [
+        {
+          "certificateFile": "{{ cert_file }}",
+          "keyFile": "{{ key_file }}"
+        }
+      ],
+      "serverName": "{{ server_name }}"
+    },
+    "xhttpSettings": {
+      "host": "",
+      "path": "/a7f3k9-x2m8q/",
+      "mode": "auto"
+    }
+  },
+  "tag": "inbound-10000",
+  "remark": "01",
+  "enable": true
+}

@@ -1,0 +1,55 @@
+{
+  "port": {{ port }},
+  "listen": "{{ listen }}",
+  "protocol": "vless",
+  "settings": {
+    "clients": [
+      {
+        "id": "{{ uuid }}",
+        "flow": "xtls-rprx-vision"
+      }
+    ],
+    "decryption": "none"
+  },
+  "streamSettings": {
+    "network": "xhttp",
+    "security": "reality",
+    "realitySettings": {
+      "show": false,
+      "dest": "{{ reality_dest }}",
+      "xver": 0,
+      "serverNames": ["{{ reality_server_name }}"],
+      "privateKey": "{{ reality_private_key }}",
+      "shortIds": ["{{ reality_short_id }}"],
+      "spiderX": "/d6b7476d5247d0c"
+    },
+    "xhttpSettings": {
+      "host": "{{ reality_host }}",
+      "path": "/assets/v3/sync",
+      "mode": "auto",
+      "headers": {
+        "User-Agent": [
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36"
+        ],
+        "Accept": [
+          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        ],
+        "Accept-Language": [
+          "en-US,en;q=0.5"
+        ],
+        "Accept-Encoding": [
+          "gzip, deflate, br"
+        ],
+        "Upgrade": [
+          "websocket"
+        ],
+        "Connection": [
+          "keep-alive, Upgrade"
+        ]
+      }
+    }
+  },
+  "tag": "inbound-443",
+  "remark": "02",
+  "enable": true
+}
