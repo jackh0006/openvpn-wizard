@@ -98,6 +98,20 @@ push "rcvbuf 0"
         log("Validating OpenVPN configuration...")
         self._validate_conf(config, server_conf, log)
 
+        # Restart OpenVPN so the (possibly new) config takes effect
+        # (on re-runs the services step may be skipped, so we restart here)
+        log("Restarting OpenVPN...")
+        if not self._systemctl("restart", "openvpn@server"):
+            if backup_path:
+                log("OpenVPN failed with new config - restoring backup...")
+                self._restore_backup(config.openvpn_dir + "/server.conf")
+                self._systemctl("restart", "openvpn@server")
+            raise RuntimeError("Failed to restart OpenVPN - check 'journalctl -u openvpn@server'")
+        await asyncio.sleep(2)
+        if not self._is_service_active("openvpn@server"):
+            raise RuntimeError("OpenVPN did not come back up after restart")
+        log("  ✓ OpenVPN active")
+
         log("OpenVPN configuration valid")
         return True
 

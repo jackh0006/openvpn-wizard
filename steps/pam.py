@@ -29,9 +29,10 @@ class PAMStep(BaseStep):
         self,
         config: InstallConfig,
     ) -> bool:
-        """Check if PAM user already exists."""
-        result = self._run_cmd(["id", config.vpn_user], check=False)
-        return result.returncode == 0
+        """PAM always runs - it's fast, idempotent, and guarantees the
+        password you typed in the wizard is the active VPN password
+        (a pre-existing user may have an unknown old password)."""
+        return False
 
     async def execute(
         self,

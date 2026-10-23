@@ -76,6 +76,20 @@ class HAProxyStep(BaseStep):
             raise RuntimeError(f"HAProxy config test failed: {result.stderr}")
 
         log("HAProxy configuration test passed")
+
+        # Reload HAProxy so the new config takes effect immediately
+        # (on re-runs the services step may be skipped, so we reload here)
+        log("Restarting HAProxy...")
+        if not self._systemctl("restart", "haproxy"):
+            raise RuntimeError("Failed to restart HAProxy - check 'journalctl -u haproxy'")
+        await asyncio.sleep(2)
+        if not self._is_service_active("haproxy"):
+            if backup_path:
+                log("HAProxy failed with new config - restoring backup...")
+                self._restore_backup(config.haproxy_cfg)
+                self._systemctl("restart", "haproxy")
+            raise RuntimeError("HAProxy did not come back up after restart")
+        log("  ✓ HAProxy active with new configuration")
         return True
 
     async def rollback(self, config: InstallConfig, rollback_data: dict) -> bool:

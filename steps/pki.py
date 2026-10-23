@@ -98,6 +98,16 @@ class PKIStep(BaseStep):
         # Copy runtime assets to /etc/openvpn/
         await self._copy_runtime_assets(config)
 
+        # If OpenVPN is running with the old certs, restart it so the
+        # runtime copies (ca/cert/key/dh/ta.key) it just reloaded match
+        if self._is_service_active("openvpn@server"):
+            log("Restarting OpenVPN to load new PKI assets...")
+            self._systemctl("restart", "openvpn@server")
+            await asyncio.sleep(2)
+            if not self._is_service_active("openvpn@server"):
+                raise RuntimeError("OpenVPN failed to restart after PKI refresh")
+            log("  ✓ OpenVPN restarted with new PKI")
+
         # Set permissions
         log("Setting secure permissions...")
         self._run_cmd(["chmod", "600", str(pki_dir / "ta.key")])
