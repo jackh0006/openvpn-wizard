@@ -37,10 +37,16 @@ net.ipv6.conf.lo.disable_ipv6=1
         self,
         config: InstallConfig,
     ) -> bool:
-        """Check if IPv4 forwarding is already enabled."""
+        """Done only when forwarding is on AND our NAT rule exists."""
         try:
             result = self._run_cmd(["cat", "/proc/sys/net/ipv4/ip_forward"], check=False)
-            return "1" in result.stdout
+            if "1" not in result.stdout:
+                return False
+            # NAT masquerade rule for the VPN subnet must exist too
+            nat = self._run_cmd(
+                ["iptables", "-t", "nat", "-L", "POSTROUTING", "-n"], check=False
+            )
+            return config.vpn_subnet in nat.stdout and "MASQUERADE" in nat.stdout
         except Exception:
             return False
 
@@ -76,9 +82,9 @@ net.ipv6.conf.lo.disable_ipv6=1
         log("Configuring iptables NAT...")
         await self._setup_iptables(config)
 
-        # Save iptables rules
+        # Save iptables rules (base._run_cmd takes a list - use bash -c for the redirect)
         log("Saving iptables rules...")
-        self._run_cmd(["iptables-save", ">", "/etc/iptables/rules.v4"], shell=True)
+        self._run_cmd(["bash", "-c", "iptables-save > /etc/iptables/rules.v4"])
 
         # Ensure iptables-persistent is configured
         self._run_cmd(["systemctl", "enable", "netfilter-persistent"], check=False)

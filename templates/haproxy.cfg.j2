@@ -6,39 +6,47 @@ global
 
 defaults
     mode tcp
+    log global
+    option dontlognull
     timeout connect 5s
-    timeout client  30s
-    timeout server  30s
+    timeout client  10m
+    timeout server  10m
 
+# ─────────────────────────────────────────────────────────────────
+# The ONLY public listener. Everything else lives on 127.0.0.1.
+# ─────────────────────────────────────────────────────────────────
 frontend ft_443
     bind 0.0.0.0:443
     mode tcp
     tcp-request inspect-delay 5s
     tcp-request content accept if { req_ssl_hello_type 1 }
 
-    # SNI-less rule (OpenVPN)
+    # No SNI -> OpenVPN (OpenVPN's TLS-crypt handshake has no SNI)
     acl has_sni req.ssl_sni -m found
     use_backend bk_openvpn if !has_sni
 
-    # VLESS-TLS domains
+    # VLESS-TLS + xhttp (2 user domains)
     use_backend bk_10000 if { req.ssl_sni -i {{ domain1 }} }
     use_backend bk_10004 if { req.ssl_sni -i {{ domain2 }} }
 
-    # Reality domain
+    # VLESS-Reality (spoofs a popular site)
     use_backend bk_443 if { req.ssl_sni -i {{ reality_domain }} }
+
+    # Catch-all: anything else goes to OpenVPN
+    default_backend bk_openvpn
 
 backend bk_openvpn
     mode tcp
-    server openvpn 127.0.0.1:1194 send-proxy-v2
+    server openvpn 127.0.0.1:1194
 
 backend bk_10000
     mode tcp
-    server s10000 127.0.0.1:10000 send-proxy-v2
+    server s10000 127.0.0.1:10000
 
 backend bk_10004
     mode tcp
-    server s10004 127.0.0.1:10004 send-proxy-v2
+    server s10004 127.0.0.1:10004
 
 backend bk_443
     mode tcp
-    server s443 127.0.0.1:443 send-proxy-v2
+    server s443 127.0.0.1:443

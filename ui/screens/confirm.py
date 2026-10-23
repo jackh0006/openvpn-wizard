@@ -43,8 +43,8 @@ class ConfirmScreen:
             "warning": "This will REPLACE existing HAProxy config",
         },
         "xui": {
-            "what": "Deploy 3X-UI panel with 2 inbounds (VLESS-TLS+xhttp on 10000, VLESS-Reality+xhttp on 443)",
-            "why": "3X-UI manages VLESS users and inbounds. We configure it via SQLite database directly.",
+            "what": "Deploy 3X-UI panel with 3 inbounds: VLESS-TLS+xhttp on 10000 & 10004, VLESS-Reality+xhttp on 443 (all loopback-only)",
+            "why": "3X-UI manages VLESS users and inbounds. We configure it via the SQLite database directly - only HAProxy is ever public.",
             "files": [
                 "/etc/x-ui/x-ui.db (SQLite database with inbound configs)",
                 "/etc/x-ui/cert.pem, key.pem (TLS certificates for VLESS-TLS)",

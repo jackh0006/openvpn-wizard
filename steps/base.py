@@ -116,6 +116,7 @@ class BaseStep(ABC):
         cwd: str = None,
         env: Dict[str, str] = None,
         timeout: int = 300,
+        input_data: str = None,
     ) -> subprocess.CompletedProcess:
         """Run a command with logging."""
         log_command(cmd, self.logger)
@@ -128,6 +129,7 @@ class BaseStep(ABC):
                 cwd=cwd,
                 env=env,
                 timeout=timeout,
+                input=input_data,
             )
             if capture and result.stdout:
                 log_output(result.stdout, self.logger)
@@ -144,6 +146,12 @@ class BaseStep(ABC):
                 f"Command failed: {' '.join(cmd)}",
                 command=' '.join(cmd),
                 fix_hint="Check logs above for details"
+            ) from e
+        except (FileNotFoundError, OSError) as e:
+            raise SystemError(
+                f"Command not found or cannot be executed: {' '.join(cmd)}",
+                command=' '.join(cmd),
+                fix_hint="Make sure the required program is installed and in PATH"
             ) from e
         except subprocess.TimeoutExpired as e:
             raise SystemError(

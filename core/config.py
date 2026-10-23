@@ -34,12 +34,14 @@ class InstallConfig:
     user_db: str = "/etc/openvpn/users.db"
     profiles_dir: str = "/etc/openvpn/profiles"
     web_dir: str = "/var/www/vpn-profiles"
+    reality_key_path: str = "/etc/x-ui/reality_private.key"
 
     # Network (with defaults)
     openvpn_port: int = 1194
     haproxy_port: int = 443
-    xui_inbound1_port: int = 10000
-    xui_inbound2_port: int = 443  # Local only, routed via HAProxy
+    xui_inbound1_port: int = 10000      # VLESS-TLS + xhttp, domain1 (loopback)
+    xui_tls2_port: int = 10004          # VLESS-TLS + xhttp, domain2 (loopback)
+    xui_inbound2_port: int = 443        # VLESS-Reality (loopback, routed via HAProxy)
     vpn_subnet: str = "10.8.0.0/24"
     vpn_gateway: str = "10.8.0.1"
     dns1: str = "1.1.1.1"

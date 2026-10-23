@@ -2,6 +2,7 @@
 Validation Checklist - Post-install verification.
 """
 
+import os
 import socket
 import subprocess
 from typing import Callable, List, Tuple
@@ -26,9 +27,9 @@ def run_validation(config: InstallConfig) -> List[Tuple[str, bool, str]]:
     # Define all checks
     checks.append(("HAProxy listening on 0.0.0.0:443", check_haproxy_listen))
     checks.append(("OpenVPN listening on 127.0.0.1:1194", check_openvpn_listen))
-    checks.append(("3X-UI inbound 10000 active", lambda c: check_port_listen(c, 10000, "0.0.0.0", "3X-UI VLESS-TLS 1")))
-    checks.append(("3X-UI inbound 10004 active", lambda c: check_port_listen(c, 10004, "0.0.0.0", "3X-UI VLESS-TLS 2")))
-    checks.append(("3X-UI inbound 443 active", lambda c: check_port_listen(c, 443, "127.0.0.1", "3X-UI VLESS-Reality")))
+    checks.append(("3X-UI inbound 10000 active (loopback)", lambda c: check_port_listen(c, 10000, "127.0.0.1", "3X-UI VLESS-TLS 1")))
+    checks.append(("3X-UI inbound 10004 active (loopback)", lambda c: check_port_listen(c, 10004, "127.0.0.1", "3X-UI VLESS-TLS 2")))
+    checks.append(("3X-UI inbound 443 active (loopback)", lambda c: check_port_listen(c, 443, "127.0.0.1", "3X-UI VLESS-Reality")))
     checks.append(("IPv4 forwarding enabled", check_ip_forward))
     checks.append(("NAT MASQUERADE rule exists", lambda c: check_nat_masquerade(c)))
     checks.append(("OpenVPN config syntax OK", check_openvpn_syntax))
@@ -112,17 +113,24 @@ def check_nat_masquerade(config: InstallConfig) -> Tuple[bool, str]:
 
 
 def check_openvpn_syntax(config: InstallConfig) -> Tuple[bool, str]:
-    """Check OpenVPN config syntax."""
+    """Validate OpenVPN config statically (OpenVPN has no --dry-run)."""
+    import re
     try:
-        result = subprocess.run([
-            "openvpn", "--config", "/etc/openvpn/server.conf", "--verb", "4", "--dry-run"
-        ], capture_output=True, text=True)
-        if result.returncode == 0:
-            return True, "OpenVPN config syntax OK"
-        else:
-            return False, f"OpenVPN config error: {result.stderr}"
+        with open("/etc/openvpn/server.conf") as f:
+            content = f.read()
+        required = ["port ", "proto tcp", "dev tun", "tls-crypt",
+                    "verify-client-cert require", "server "]
+        missing = [d for d in required if d not in content]
+        if missing:
+            return False, f"Config missing directives: {missing}"
+        # Referenced files must exist
+        for directive in ["ca", "cert", "key", "dh", "tls-crypt"]:
+            m = re.search(rf"^{directive}\s+(\S+)$", content, re.MULTILINE)
+            if m and not os.path.exists(m.group(1)):
+                return False, f"Referenced file missing: {m.group(1)}"
+        return True, "OpenVPN config directives and files OK"
     except Exception as e:
-        return False, f"Error testing OpenVPN config: {e}"
+        return False, f"Error validating OpenVPN config: {e}"
 
 
 def check_client_profile(config: InstallConfig) -> Tuple[bool, str]:

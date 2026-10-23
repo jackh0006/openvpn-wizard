@@ -201,19 +201,46 @@ class UserManager:
         self._run_cmd(["chpasswd"], input_data=f"{username}:{password}")
 
     def _generate_client_cert(self, username: str):
-        """Generate client certificate via Easy-RSA."""
-        self._run_cmd(["./easyrsa", "--batch", "build-client-full", username, "nopass"], cwd=str(self.pki_dir))
+        """Generate client certificate via Easy-RSA (system binary, batch mode)."""
+        easyrsa = self._find_easyrsa()
+        self._run_cmd(
+            [easyrsa, "--batch", "build-client-full", username, "nopass"],
+            env=self._easyrsa_env(),
+        )
 
     def _revoke_cert(self, username: str):
         """Revoke client certificate and regenerate CRL."""
-        self._run_cmd(["./easyrsa", "--batch", "revoke", username], cwd=str(self.pki_dir))
-        self._run_cmd(["./easyrsa", "gen-crl"], cwd=str(self.pki_dir))
+        easyrsa = self._find_easyrsa()
+        self._run_cmd([easyrsa, "--batch", "revoke", username], env=self._easyrsa_env())
+        self._run_cmd([easyrsa, "gen-crl"], env=self._easyrsa_env())
 
         # Copy CRL to OpenVPN directory
         self._run_cmd(["cp", str(self.pki_dir / "crl.pem"), "/etc/openvpn/crl.pem"])
 
         # Reload OpenVPN to pick up new CRL
         self._run_cmd(["systemctl", "reload", "openvpn@server"], check=False)
+
+    def _find_easyrsa(self) -> str:
+        """Locate the easy-rsa binary."""
+        candidates = [
+            "/usr/share/easy-rsa/easyrsa",
+            "/usr/local/share/easy-rsa/easyrsa",
+        ]
+        for c in candidates:
+            if Path(c).exists():
+                return c
+        result = self._run_cmd(["which", "easyrsa"], check=False)
+        if result and result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        raise RuntimeError("easy-rsa not found (apt-get install -y easy-rsa)")
+
+    def _easyrsa_env(self) -> dict:
+        """Non-interactive env for easy-rsa, pointing at our PKI."""
+        import os
+        env = dict(os.environ)
+        env["EASYRSA_BATCH"] = "1"
+        env["EASYRSA_PKI"] = str(self.pki_dir)
+        return env
 
     def _generate_profile(self, name: str, username: str, client_cert: str, client_key: str) -> str:
         """Generate .ovpn profile for user."""
@@ -247,8 +274,15 @@ class UserManager:
 
         return str(profile_path)
 
-    def _run_cmd(self, cmd: list, check: bool = True, cwd: str = None, input_data: str = None):
-        """Run command with logging."""
-        from steps.base import BaseStep
-        step = BaseStep()
-        return step._run_cmd(cmd, check=check, cwd=cwd)
+    def _run_cmd(self, cmd: list, check: bool = True, cwd: str = None, input_data: str = None, env=None):
+        """Run command with logging. input_data is piped to stdin (e.g. for chpasswd)."""
+        subprocess_result = subprocess.run(
+            cmd, capture_output=True, text=True,
+            check=False, cwd=cwd, input=input_data, env=env,
+        )
+        if check and subprocess_result.returncode != 0:
+            raise RuntimeError(
+                f"Command failed ({subprocess_result.returncode}): {' '.join(cmd)}\n"
+                f"{subprocess_result.stderr or subprocess_result.stdout}"
+            )
+        return subprocess_result

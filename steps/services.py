@@ -88,11 +88,11 @@ class ServicesStep(BaseStep):
         import socket
 
         listeners = [
-            (443, "0.0.0.0", "HAProxy"),
+            (443, "0.0.0.0", "HAProxy (public)"),
             (1194, "127.0.0.1", "OpenVPN"),
-            (10000, "0.0.0.0", "3X-UI VLESS-TLS"),
-            (10004, "0.0.0.0", "3X-UI VLESS-TLS 2"),
-            (443, "127.0.0.1", "3X-UI VLESS-Reality"),
+            (config.xui_inbound1_port, "127.0.0.1", "3X-UI VLESS-TLS 1"),
+            (config.xui_tls2_port, "127.0.0.1", "3X-UI VLESS-TLS 2"),
+            (config.xui_inbound2_port, "127.0.0.1", "3X-UI VLESS-Reality"),
         ]
 
         for port, bind_ip, name in listeners:

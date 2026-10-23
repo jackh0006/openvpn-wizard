@@ -4,6 +4,7 @@ Step 1: Install System Packages
 
 import asyncio
 from typing import Callable, List
+from pathlib import Path
 from core.config import InstallConfig
 from steps.base import BaseStep
 from core.logger import get_logger
@@ -29,33 +30,29 @@ class PackagesStep(BaseStep):
         "haproxy",
         "openvpn",
         "easy-rsa",
-        "libpam-radius-auth",
-
-        # Database & tools
+        "nginx",          # serves the .ovpn download page
         "sqlite3",
-        "python3",
-        "python3-pip",
+
+        # Tools
         "curl",
-        "gnupg2",
         "ca-certificates",
         "iptables-persistent",
         "net-tools",
-
-        # Build tools (for 3X-UI)
-        "build-essential",
-        "golang-go",
     ]
 
-    XUI_DEPS = [
-        # 3X-UI will be installed via official script
-    ]
+    def _apt_env(self) -> dict:
+        """Environment for non-interactive apt runs (no debconf prompts, keeps PATH)."""
+        import os
+        env = dict(os.environ)
+        env["DEBIAN_FRONTEND"] = "noninteractive"
+        return env
 
     async def is_already_done(
         self,
         config: InstallConfig,
     ) -> bool:
         """Check if key packages are already installed."""
-        critical = ["haproxy", "openvpn", "sqlite3", "python3"]
+        critical = ["haproxy", "openvpn", "easy-rsa", "sqlite3", "python3"]
         missing = []
         for pkg in critical:
             result = self._run_cmd(["dpkg", "-s", pkg], check=False)
@@ -75,8 +72,10 @@ class PackagesStep(BaseStep):
                 output_callback(msg)
             self.logger.info(msg)
 
+        env = self._apt_env()
+
         log("Updating package lists...")
-        self._run_cmd(["apt-get", "update", "-y"])
+        self._run_cmd(["apt-get", "update", "-y"], env=env)
 
         log("Installing required packages...")
         # Install in batches to show progress
@@ -84,7 +83,10 @@ class PackagesStep(BaseStep):
         for i in range(0, len(self.PACKAGES), batch_size):
             batch = self.PACKAGES[i:i+batch_size]
             log(f"Installing: {', '.join(batch)}")
-            self._run_cmd(["apt-get", "install", "-y", "--no-install-recommends"] + batch)
+            self._run_cmd(
+                ["apt-get", "install", "-y", "--no-install-recommends"] + batch,
+                env=env, timeout=900,
+            )
 
         # Install 3X-UI
         log("Installing 3X-UI panel...")
@@ -92,11 +94,22 @@ class PackagesStep(BaseStep):
 
         # Verify installations
         log("Verifying installations...")
-        for pkg in ["haproxy", "openvpn", "easyrsa", "sqlite3"]:
-            result = self._run_cmd(["which", pkg], check=False)
-            if result.returncode != 0:
+        for pkg, path in [
+            ("haproxy", "haproxy"),
+            ("openvpn", "openvpn"),
+            ("easy-rsa", "/usr/share/easy-rsa/easyrsa"),
+            ("sqlite3", "sqlite3"),
+        ]:
+            if path.startswith("/"):
+                ok = Path(path).exists()
+                found = path
+            else:
+                result = self._run_cmd(["which", pkg], check=False)
+                ok = result.returncode == 0
+                found = result.stdout.strip()
+            if not ok:
                 raise RuntimeError(f"Package {pkg} not found after installation")
-            log(f"  ✓ {pkg}: {result.stdout.strip()}")
+            log(f"  ✓ {pkg}: {found}")
 
         log("All packages installed successfully")
         return True

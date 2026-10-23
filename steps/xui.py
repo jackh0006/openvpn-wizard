@@ -34,13 +34,22 @@ class XUIStep(BaseStep):
         self,
         config: InstallConfig,
     ) -> bool:
-        """Check if 3X-UI is already deployed."""
+        """Check if OUR 3 inbounds exist in the 3X-UI database."""
         db_path = Path(config.xui_db)
         if not db_path.exists():
             return False
-        # Check if x-ui command exists
-        result = self._run_cmd(["which", "x-ui"], check=False)
-        return result.returncode == 0
+        try:
+            conn = sqlite3.connect(str(db_path))
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT COUNT(*) FROM inbounds WHERE tag IN (?, ?, ?)",
+                ("inbound-10000", "inbound-10004", "inbound-443"),
+            )
+            count = cursor.fetchone()[0]
+            conn.close()
+            return count == 3
+        except Exception:
+            return False
 
     async def execute(
         self,
@@ -54,13 +63,21 @@ class XUIStep(BaseStep):
                 output_callback(msg)
             self.logger.info(msg)
 
-        # Ensure x-ui service is stopped for DB modification
-        log("Stopping 3X-UI service...")
-        self._systemctl("stop", "x-ui")
-
-        # Wait for DB to be created by 3X-UI
-        log("Waiting for 3X-UI database...")
-        await self._wait_for_db(config.xui_db)
+        # Install 3X-UI if it's missing entirely
+        result = self._run_cmd(["which", "x-ui"], check=False)
+        if result.returncode != 0:
+            log("3X-UI not found - installing from official release...")
+            self._run_cmd([
+                "bash", "-c",
+                "curl -fsSL https://raw.githubusercontent.com/MHSanaei/3x-ui/master/install.sh | bash -s -- --version v2.5.3"
+            ], timeout=600)
+            # Fresh install creates the database
+            await self._wait_for_db(config.xui_db)
+        else:
+            # Ensure x-ui service is stopped for DB modification
+            log("Stopping 3X-UI service...")
+            self._systemctl("stop", "x-ui")
+            await self._wait_for_db(config.xui_db)
 
         # Backup existing DB
         log("Backing up existing 3X-UI database...")
@@ -69,11 +86,12 @@ class XUIStep(BaseStep):
         # Generate inbound configurations
         log("Generating inbound configurations...")
         inbound1 = self._generate_inbound_10000(config)
-        inbound2 = self._generate_inbound_443(config)
+        inbound2 = self._generate_inbound_10004(config)
+        inbound3 = self._generate_inbound_443(config)
 
         # Update database
         log("Updating 3X-UI database...")
-        self._update_xui_db(config.xui_db, inbound1, inbound2)
+        self._update_xui_db(config.xui_db, [inbound1, inbound2, inbound3])
 
         # Ensure TLS certificates exist for VLESS-TLS
         log("Ensuring TLS certificates...")
@@ -103,14 +121,14 @@ class XUIStep(BaseStep):
             await asyncio.sleep(1)
 
     def _generate_inbound_10000(self, config: InstallConfig) -> dict:
-        """Generate VLESS-TLS + xhttp inbound for port 10000."""
+        """Generate VLESS-TLS + xhttp inbound for port 10000 (domain1, loopback only)."""
         import uuid
         import secrets
         # Generate random path for stealth
         random_path = "/" + secrets.token_urlsafe(12) + "/"
         return {
             "port": config.xui_inbound1_port,
-            "listen": "0.0.0.0",
+            "listen": "127.0.0.1",
             "protocol": "vless",
             "settings": json.dumps({
                 "clients": [{"id": str(uuid.uuid4()), "flow": "xtls-rprx-vision"}],
@@ -135,6 +153,41 @@ class XUIStep(BaseStep):
             }),
             "tag": "inbound-10000",
             "remark": "01",
+            "enable": True,
+        }
+
+    def _generate_inbound_10004(self, config: InstallConfig) -> dict:
+        """Generate second VLESS-TLS + xhttp inbound for port 10004 (domain2, loopback only)."""
+        import uuid
+        import secrets
+        random_path = "/" + secrets.token_urlsafe(12) + "/"
+        return {
+            "port": config.xui_tls2_port,
+            "listen": "127.0.0.1",
+            "protocol": "vless",
+            "settings": json.dumps({
+                "clients": [{"id": str(uuid.uuid4()), "flow": "xtls-rprx-vision"}],
+                "decryption": "none",
+            }),
+            "streamSettings": json.dumps({
+                "network": "xhttp",
+                "security": "tls",
+                "tlsSettings": {
+                    "alpn": ["h2", "http/1.1"],
+                    "certificates": [{
+                        "certificateFile": config.xui_cert,
+                        "keyFile": config.xui_key,
+                    }],
+                    "serverName": config.domain2,
+                },
+                "xhttpSettings": {
+                    "host": "",
+                    "path": random_path,
+                    "mode": "auto",
+                },
+            }),
+            "tag": "inbound-10004",
+            "remark": "03",
             "enable": True,
         }
 
@@ -191,25 +244,30 @@ class XUIStep(BaseStep):
 
     def _get_or_generate_reality_key(self, config: InstallConfig) -> str:
         """Get or generate X25519 private key for Reality."""
-        key_file = Path("/etc/x-ui/reality_private.key")
+        key_file = Path(config.reality_key_path)
         if key_file.exists():
             return key_file.read_text().strip()
 
-        # Generate using xray
-        result = self._run_cmd(["xray", "x25519"], check=False)
-        if result.returncode == 0:
-            # Output format: "Private key: xxx\nPublic key: yyy"
-            for line in result.stdout.split('\n'):
-                if line.startswith("Private key:"):
-                    priv = line.split(":")[1].strip()
-                    key_file.write_text(priv)
-                    key_file.chmod(0o600)
-                    return priv
+        # Try generating with xray (if present)
+        try:
+            result = self._run_cmd(["xray", "x25519"], check=False)
+            if result.returncode == 0:
+                # Output format: "Private key: xxx\nPublic key: yyy"
+                for line in result.stdout.split('\n'):
+                    if line.startswith("Private key:"):
+                        priv = line.split(":", 1)[1].strip()
+                        key_file.parent.mkdir(parents=True, exist_ok=True)
+                        key_file.write_text(priv)
+                        key_file.chmod(0o600)
+                        return priv
+        except (FileNotFoundError, SystemError, Exception):
+            pass  # fall through to Python generation
 
-        # Fallback: generate with Python
+        # Fallback: generate with Python cryptography
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
         private_key = X25519PrivateKey.generate()
         priv = private_key.private_bytes_raw().hex()
+        key_file.parent.mkdir(parents=True, exist_ok=True)
         key_file.write_text(priv)
         key_file.chmod(0o600)
         return priv
@@ -234,8 +292,13 @@ class XUIStep(BaseStep):
         cert_path.chmod(0o644)
         key_path.chmod(0o600)
 
-    def _update_xui_db(self, db_path: str, inbound1: dict, inbound2: dict):
-        """Update 3X-UI SQLite database with inbound configurations."""
+    def _update_xui_db(self, db_path: str, inbounds: list):
+        """Update 3X-UI SQLite database with inbound configurations.
+
+        NOTE: the 3x-ui schema names the column `stream_settings` (underscore),
+        while the JSON payload key we store is `streamSettings` - that's the
+        xray config key, which is correct.
+        """
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
 
@@ -245,13 +308,22 @@ class XUIStep(BaseStep):
             if not cursor.fetchone():
                 raise ConfigError("Inbounds table not found in 3X-UI database")
 
-            # Delete existing inbounds with same tags
-            cursor.execute("DELETE FROM inbounds WHERE tag IN (?, ?)", ("inbound-10000", "inbound-443"))
+            # Remove our previous inbounds AND anything else bound to our ports
+            # (two listeners can never share a port - xray would fail to start)
+            tags = tuple(i["tag"] for i in inbounds)
+            ports = tuple(i["port"] for i in inbounds)
+            cursor.execute(
+                f"DELETE FROM inbounds WHERE tag IN ({','.join('?' * len(tags))}) "
+                f"OR port IN ({','.join('?' * len(ports))})",
+                tags + ports,
+            )
+            if cursor.rowcount:
+                self.logger.info(f"Removed {cursor.rowcount} conflicting inbound(s)")
 
             # Insert new inbounds
-            for inbound in [inbound1, inbound2]:
+            for inbound in inbounds:
                 cursor.execute("""
-                    INSERT INTO inbounds (port, listen, protocol, settings, streamSettings, tag, remark, enable)
+                    INSERT INTO inbounds (port, listen, protocol, settings, stream_settings, tag, remark, enable)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     inbound["port"],
@@ -269,10 +341,11 @@ class XUIStep(BaseStep):
             conn.close()
 
     async def _verify_inbounds(self, config: InstallConfig):
-        """Verify inbounds are listening."""
+        """Verify inbounds are listening on loopback."""
         import socket
         ports_to_check = [
-            (config.xui_inbound1_port, "VLESS-TLS"),
+            (config.xui_inbound1_port, "VLESS-TLS 1"),
+            (config.xui_tls2_port, "VLESS-TLS 2"),
             (config.xui_inbound2_port, "VLESS-Reality"),
         ]
 
@@ -284,7 +357,7 @@ class XUIStep(BaseStep):
                     result = sock.connect_ex(("127.0.0.1", port))
                     sock.close()
                     if result == 0:
-                        self.logger.info(f"  ✓ {name} listening on port {port}")
+                        self.logger.info(f"  ✓ {name} listening on 127.0.0.1:{port}")
                         break
                 except Exception:
                     pass

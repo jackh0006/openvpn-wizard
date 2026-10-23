@@ -91,22 +91,50 @@ push "rcvbuf 0"
         backup_path = self._backup_file(config.openvpn_dir + "/server.conf")
 
         log("Writing OpenVPN server configuration...")
-        self._write_file(config.openvpn_dir + "/server.conf", self.SERVER_CONF, mode=0o644)
+        server_conf = self._build_server_conf(config)
+        self._write_file(config.openvpn_dir + "/server.conf", server_conf, mode=0o644)
 
-        # Verify config syntax
-        log("Testing OpenVPN configuration syntax...")
-        result = self._run_cmd([
-            "openvpn", "--config", config.openvpn_dir + "/server.conf",
-            "--verb", "4", "--dry-run"
-        ], check=False)
+        # Validate: required directives present + referenced files exist
+        log("Validating OpenVPN configuration...")
+        self._validate_conf(config, server_conf, log)
 
-        if result.returncode != 0:
-            if backup_path:
-                self._restore_backup(config.openvpn_dir + "/server.conf")
-            raise RuntimeError(f"OpenVPN config test failed: {result.stderr}")
-
-        log("OpenVPN configuration test passed")
+        log("OpenVPN configuration valid")
         return True
+
+    def _find_pam_plugin(self) -> str:
+        """Locate the OpenVPN PAM auth plugin (arch-independent)."""
+        import glob
+        candidates = glob.glob("/usr/lib/*/openvpn/plugins/openvpn-plugin-auth-pam.so")
+        if candidates:
+            return candidates[0]
+        return "/usr/lib/x86_64-linux-gnu/openvpn/plugins/openvpn-plugin-auth-pam.so"
+
+    def _build_server_conf(self, config: InstallConfig) -> str:
+        """Build server.conf with the detected PAM plugin path."""
+        conf = self.SERVER_CONF.replace(
+            "plugin /usr/lib/x86_64-linux-gnu/openvpn/plugins/openvpn-plugin-auth-pam.so login",
+            f"plugin {self._find_pam_plugin()} login",
+        )
+        return conf
+
+    def _validate_conf(self, config: InstallConfig, content: str, log):
+        """Static validation of server.conf (OpenVPN has no --dry-run)."""
+        required_directives = [
+            "port ", "proto tcp", "dev tun", "tls-crypt", "ca ", "cert ",
+            "key ", "dh ", "server ", "verify-client-cert require",
+        ]
+        missing = [d for d in required_directives if d not in content]
+        if missing:
+            raise RuntimeError(f"Generated config missing directives: {missing}")
+
+        # Every referenced file must exist (PKI step runs before this one)
+        import re
+        for directive in ["ca", "cert", "key", "dh", "tls-crypt"]:
+            m = re.search(rf"^{directive}\s+(\S+)$", content, re.MULTILINE)
+            if m and not Path(m.group(1)).exists():
+                raise RuntimeError(f"Config references missing file: {m.group(1)}")
+
+        log("  ✓ All required directives present, referenced files exist")
 
     async def rollback(self, config: InstallConfig, rollback_data: dict) -> bool:
         """Restore OpenVPN config from backup."""
