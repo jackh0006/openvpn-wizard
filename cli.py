@@ -18,6 +18,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
+from ui.theme import THEME
 
 from core.config import InstallConfig
 from core.state import InstallState, StateManager
@@ -49,7 +50,7 @@ app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
 )
-console = Console()
+console = Console(theme=THEME)
 
 
 class Installer:
