@@ -257,17 +257,27 @@ async def _run_full_install(self, non_interactive: bool, skip_validation: bool, 
             return
 
     # Step 3: Step-by-Step Confirmation
+    already_done = set()
     if not self.state or not self.state.confirm_done:
         if not await self.run_confirmation():
             await self.run_goodbye()
             return
+        # Get already-done steps from confirm screen
+        # The confirm screen stores them in self.already_done, but we need to re-detect here
+        # since the screen instance is local. Re-detect:
+        for step_id, _, step_obj in self.steps:
+            try:
+                if await step_obj.is_already_done(self.config):
+                    already_done.add(step_id)
+            except Exception:
+                pass
         if self.state:
             self.state.confirm_done = True
             self.state_manager.save(self.state)
 
     # Step 4: Installation
     if not self.state or not self.state.install_done:
-        if not await self.run_installation():
+        if not await self.run_installation(already_done=already_done):
             console.print("[red]Installation failed. Check logs for details.[/red]")
             await self.run_goodbye()
             return

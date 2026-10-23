@@ -9,6 +9,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.rule import Rule
+from rich.align import Align
 
 from ui.theme import get_console, COLORS
 from ui.components import ConfirmAction, CreditsFooter, SectionHeader, ProgressStep
@@ -110,8 +111,8 @@ class ConfirmScreen:
             "what": "Generate client .ovpn file with embedded certs, keys, CA, and TLS-crypt",
             "why": "Single-file profile contains everything needed to connect. Import into any OpenVPN client.",
             "files": [
-                f"/etc/openvpn/profiles/{{client_name}}.ovpn (client profile)",
-                f"/var/www/vpn-profiles/{{client_name}}.ovpn (web download)",
+                "/etc/openvpn/profiles/{client_name}.ovpn (client profile)",
+                "/var/www/vpn-profiles/{client_name}.ovpn (web download)",
             ],
             "rollback": "Profile files deleted",
             "time": "~2 seconds",
@@ -134,9 +135,13 @@ class ConfirmScreen:
         self.steps = steps
         self.config = config
         self.skipped = set()
+        self.already_done = set()
 
     async def run(self) -> bool:
         """Run confirmation flow. Returns True to proceed, False to back/exit."""
+        # Detect already-completed steps
+        await self._detect_already_done()
+
         while True:
             self._show_overview()
             choice = await self._get_choice()
@@ -157,6 +162,16 @@ class ConfirmScreen:
                 step_id = choice.split("_")[1]
                 await self._show_detail(step_id)
 
+    async def _detect_already_done(self):
+        """Check which steps are already completed."""
+        for step_id, _, step_obj in self.steps:
+            try:
+                if await step_obj.is_already_done(self.config):
+                    self.already_done.add(step_id)
+            except Exception:
+                # If check fails, assume not done
+                pass
+
     def _show_overview(self):
         """Show all steps with status."""
         self.console.clear()
@@ -164,7 +179,8 @@ class ConfirmScreen:
 
         intro = Panel(
             "[bold]Review each step below.[/bold] Each shows what it does, why it's needed, what files change, and rollback info.\n"
-            "[dim]Press the step number to see details. Type 'skip' to toggle skip (for re-runs).[/dim]",
+            "[dim]Press the step number to see details. Type 'skip' to toggle skip (for re-runs).[/dim]\n"
+            "[dim]Steps marked 'DONE' are already complete and will be skipped automatically.[/dim]",
             title="[primary]Instructions[/primary]",
             border_style="primary",
             padding=(1, 2),
@@ -175,12 +191,16 @@ class ConfirmScreen:
         table = Table(show_header=True, header_style="primary", box=None, padding=(0, 1))
         table.add_column("#", width=3, justify="right")
         table.add_column("Step", style="text", width=35)
-        table.add_column("Status", width=12)
+        table.add_column("Status", width=14)
         table.add_column("Time", width=12)
 
         for i, (step_id, display_name, _) in enumerate(self.steps, 1):
-            skipped = step_id in self.skipped
-            status = "[step.skipped]⊘ SKIP[/step.skipped]" if skipped else "[step.pending]○ PENDING[/step.pending]"
+            if step_id in self.already_done:
+                status = "[step.done]✓ DONE[/step.done]"
+            elif step_id in self.skipped:
+                status = "[step.skipped]⊘ SKIP[/step.skipped]"
+            else:
+                status = "[step.pending]○ PENDING[/step.pending]"
             time_est = self.STEP_DETAILS.get(step_id, {}).get("time", "~?s")
             table.add_row(str(i), display_name, status, time_est)
 
@@ -188,12 +208,14 @@ class ConfirmScreen:
         self.console.print(table)
 
         # Summary
-        pending_count = len(self.steps) - len(self.skipped)
+        pending = len(self.steps) - len(self.skipped) - len(self.already_done)
         self.console.print()
-        summary = f"[bold]{pending_count}/{len(self.steps)} steps will execute[/bold]"
+        summary_parts = [f"[bold]{pending}[/bold] steps will execute"]
+        if self.already_done:
+            summary_parts.append(f"[step.done]{len(self.already_done)} already done[/step.done]")
         if self.skipped:
-            summary += f" [warning]({len(self.skipped)} skipped)[/warning]"
-        self.console.print(Align.center(summary))
+            summary_parts.append(f"[step.skipped]{len(self.skipped)} skipped[/step.skipped]")
+        self.console.print(Align.center("  |  ".join(summary_parts)))
 
         self.console.print()
         self.console.print(CreditsFooter.render())
@@ -237,10 +259,11 @@ class ConfirmScreen:
         """Show detailed confirmation for a step."""
         detail = self.STEP_DETAILS.get(step_id, {})
         step_name = next((name for sid, name, _ in self.steps if sid == step_id), step_id)
+        is_done = step_id in self.already_done
 
         confirm = ConfirmAction(
             self.console,
-            title=f"Step: {step_name}",
+            title=f"Step: {step_name}" + (" [step.done]✓ ALREADY DONE[/step.done]" if is_done else ""),
             what=detail.get("what", "Unknown"),
             why=detail.get("why", "Unknown"),
             files_affected=detail.get("files", []),
@@ -255,6 +278,9 @@ class ConfirmScreen:
         # Just display it
         self.console.clear()
         self.console.print(confirm.render())
+        if is_done:
+            self.console.print()
+            self.console.print("[step.done]ℹ This step is already complete. It will be skipped during installation.[/step.done]")
         self.console.print()
         self.console.print("[dim]Press Enter to return...[/dim]")
         try:

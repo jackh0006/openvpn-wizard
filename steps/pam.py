@@ -25,6 +25,14 @@ class PAMStep(BaseStep):
     def description(self) -> str:
         return "Create system user for VPN authentication via PAM"
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if PAM user already exists."""
+        result = self._run_cmd(["id", config.vpn_user], check=False)
+        return result.returncode == 0
+
     async def execute(
         self,
         config: InstallConfig,

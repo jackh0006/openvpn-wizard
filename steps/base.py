@@ -57,6 +57,13 @@ class BaseStep(ABC):
         """Execute the step. Returns True on success."""
         pass
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if this step's work is already done. Returns True if already complete."""
+        return False
+
     async def rollback(self, config: InstallConfig, rollback_data: Dict[str, Any]) -> bool:
         """Rollback the step. Returns True on success."""
         self.logger.warning(f"Rollback not implemented for {self.name}")

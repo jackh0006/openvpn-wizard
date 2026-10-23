@@ -60,6 +60,17 @@ rcvbuf 0
 </tls-crypt>
 """
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if client profile already exists."""
+        profile_path = Path(config.profiles_dir) / f"{config.client_name}.ovpn"
+        if not profile_path.exists():
+            return False
+        content = profile_path.read_text()
+        return "<ca>" in content and "<cert>" in content and "<key>" in content and "<tls-crypt>" in content
+
     async def execute(
         self,
         config: InstallConfig,

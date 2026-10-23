@@ -30,6 +30,7 @@ class ProgressScreen:
         steps: List[Tuple[str, str, object]],
         config: InstallConfig,
         state: InstallState,
+        already_done: set = None,
     ):
         self.console = console
         self.steps = steps
@@ -41,6 +42,7 @@ class ProgressScreen:
         self.paused = False
         self.current_step_idx = 0
         self.step_outputs = {}
+        self.already_done = already_done or set()
 
     async def run(self) -> bool:
         """Run installation with live progress. Returns True on success."""
@@ -69,7 +71,23 @@ class ProgressScreen:
             for i, (step_id, display_name, step_obj) in enumerate(self.steps):
                 self.current_step_idx = i
 
-                # Check if skipped
+                # Check if already done (smart detection)
+                already_done = step_id in self.already_done
+                if not already_done:
+                    # Double-check at runtime in case something changed
+                    try:
+                        already_done = await step_obj.is_already_done(self.config)
+                    except Exception:
+                        already_done = False
+
+                if already_done:
+                    # Mark as completed in state
+                    self.state.mark_step_complete(step_id, ["Already complete - skipped"])
+                    self.state_manager.save(self.state)
+                    progress.update(main_task, advance=1)
+                    continue
+
+                # Check if skipped by user
                 if step_id in self.state.steps and self.state.steps[step_id].completed:
                     progress.update(main_task, advance=1)
                     continue

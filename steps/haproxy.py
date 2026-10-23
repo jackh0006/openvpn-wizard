@@ -71,6 +71,18 @@ backend bk_443
     server s443 127.0.0.1:443 send-proxy-v2
 """
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if HAProxy is already configured."""
+        cfg_path = Path(config.haproxy_cfg)
+        if not cfg_path.exists():
+            return False
+        # Check if it has our SNI routing
+        content = cfg_path.read_text()
+        return "ft_443" in content and "bk_openvpn" in content
+
     async def execute(
         self,
         config: InstallConfig,

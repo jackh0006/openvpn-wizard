@@ -26,6 +26,16 @@ class PKIStep(BaseStep):
     def description(self) -> str:
         return "Create CA, server cert, client cert, DH params, and TLS-crypt key"
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if PKI is already bootstrapped."""
+        pki_dir = Path(config.pki_dir)
+        ca_crt = pki_dir / "ca.crt"
+        ta_key = pki_dir / "ta.key"
+        return ca_crt.exists() and ta_key.exists()
+
     async def execute(
         self,
         config: InstallConfig,

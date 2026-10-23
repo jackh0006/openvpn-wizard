@@ -28,6 +28,14 @@ class UserDBStep(BaseStep):
     def description(self) -> str:
         return "Save user info, certs, and keys to SQLite for add/remove/change operations"
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if user database already exists."""
+        db_path = Path(config.user_db)
+        return db_path.exists()
+
     async def execute(
         self,
         config: InstallConfig,

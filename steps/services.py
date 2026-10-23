@@ -30,6 +30,16 @@ class ServicesStep(BaseStep):
         ("x-ui", "3X-UI Panel"),
     ]
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if all services are already active."""
+        for service_name, _ in self.SERVICES:
+            if not self._is_service_active(service_name):
+                return False
+        return True
+
     async def execute(
         self,
         config: InstallConfig,

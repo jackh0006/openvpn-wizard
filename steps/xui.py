@@ -30,6 +30,18 @@ class XUIStep(BaseStep):
     def description(self) -> str:
         return "Configure 3X-UI SQLite database with VLESS-TLS+xhttp and VLESS-Reality+xhttp inbounds"
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if 3X-UI is already deployed."""
+        db_path = Path(config.xui_db)
+        if not db_path.exists():
+            return False
+        # Check if x-ui command exists
+        result = self._run_cmd(["which", "x-ui"], check=False)
+        return result.returncode == 0
+
     async def execute(
         self,
         config: InstallConfig,

@@ -50,6 +50,19 @@ class PackagesStep(BaseStep):
         # 3X-UI will be installed via official script
     ]
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if key packages are already installed."""
+        critical = ["haproxy", "openvpn", "sqlite3", "python3"]
+        missing = []
+        for pkg in critical:
+            result = self._run_cmd(["dpkg", "-s", pkg], check=False)
+            if result.returncode != 0:
+                missing.append(pkg)
+        return len(missing) == 0
+
     async def execute(
         self,
         config: InstallConfig,

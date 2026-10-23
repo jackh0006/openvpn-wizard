@@ -33,6 +33,17 @@ net.ipv6.conf.default.disable_ipv6=1
 net.ipv6.conf.lo.disable_ipv6=1
 """
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if IPv4 forwarding is already enabled."""
+        try:
+            result = self._run_cmd(["cat", "/proc/sys/net/ipv4/ip_forward"], check=False)
+            return "1" in result.stdout
+        except Exception:
+            return False
+
     async def execute(
         self,
         config: InstallConfig,

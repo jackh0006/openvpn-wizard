@@ -64,6 +64,17 @@ push "sndbuf 0"
 push "rcvbuf 0"
 """
 
+    async def is_already_done(
+        self,
+        config: InstallConfig,
+    ) -> bool:
+        """Check if OpenVPN config already exists."""
+        conf_path = Path(config.openvpn_dir) / "server.conf"
+        if not conf_path.exists():
+            return False
+        content = conf_path.read_text()
+        return "AES-256-GCM" in content and "tls-crypt" in content
+
     async def execute(
         self,
         config: InstallConfig,
