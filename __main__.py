@@ -103,9 +103,9 @@ class Installer:
         screen = ConfirmScreen(self.console, self.steps, self.config)
         return await screen.run()
 
-    async def run_installation(self) -> bool:
+    async def run_installation(self, already_done: set = None) -> bool:
         """Run the installation with live progress. Returns True on success."""
-        screen = ProgressScreen(self.console, self.steps, self.config, self.state)
+        screen = ProgressScreen(self.console, self.steps, self.config, self.state, already_done=already_done or set())
         success = await screen.run()
         if success:
             self.state.completed = True
