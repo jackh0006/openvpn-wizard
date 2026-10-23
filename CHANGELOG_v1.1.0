@@ -1,0 +1,27 @@
+OpenVPN Wizard v1.1.0 - Bugfix Release with Enhanced Features
+
+Bug Fixes:
+- Fixed systemd service name mismatch (server vs warp1194-tcp)
+- Fixed HAProxy backend server reference (127.0.0.1:1194)
+- Fixed OpenVPN config validation (removed deprecated options)
+- Fixed client config generation (proper inline certs/keys)
+- Fixed Termux script paths and permissions
+- Fixed integration test service checks
+
+New Features:
+- Smart one-line install with auto-detection
+- OVPN file retrieval via API/code with auth
+- User management CLI (add/revoke/list/show)
+- Complete uninstall command (clean removal)
+- Quick install mode with sensible defaults
+- Password-protected OVPN file generation
+- Auto-generated secure passwords
+- QR code for mobile OVPN import
+- Health check endpoint
+
+Enhancements:
+- Better error handling and logging
+- Color-coded output with progress bars
+- Comprehensive documentation updates
+- Improved test coverage
+- Health check script for monitoring

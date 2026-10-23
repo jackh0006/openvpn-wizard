@@ -1,0 +1,13 @@
+set_var EASYRSA_REQ_COUNTRY    "AE"
+set_var EASYRSA_REQ_PROVINCE   "Dubai"
+set_var EASYRSA_REQ_CITY       "Dubai"
+set_var EASYRSA_REQ_ORG        "OpenVPN Wizard"
+set_var EASYRSA_REQ_EMAIL      "admin@{{DOMAIN}}"
+set_var EASYRSA_REQ_OU         "VPN"
+set_var EASYRSA_KEY_SIZE       384
+set_var EASYRSA_ALGO           ec
+set_var EASYRSA_CURVE          secp384r1
+set_var EASYRSA_CA_EXPIRE      3650
+set_var EASYRSA_CERT_EXPIRE    825
+set_var EASYRSA_NS_SUPPORT     "no"
+set_var EASYRSA_NS_COMMENT     "OpenVPN Wizard Certificate"
