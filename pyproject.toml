@@ -30,6 +30,7 @@ classifiers = [
     "Topic :: System :: Networking",
 ]
 requires-python = ">=3.10"
+py-modules = ["cli"]
 dependencies = [
     "rich>=13.7.0",
     "textual>=0.44.0",
@@ -51,7 +52,7 @@ dev = [
 ]
 
 [project.scripts]
-vpn-installer = "__main__:app"
+vpn-installer = "cli:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
