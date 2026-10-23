@@ -53,6 +53,31 @@ app = typer.Typer(
 console = Console(theme=THEME)
 
 
+def _version_callback(value: bool) -> None:
+    """Print version and exit when --version is passed."""
+    if value:
+        try:
+            from importlib.metadata import version as pkg_version
+            v = pkg_version("vpn-installer")
+        except Exception:
+            v = "1.0.0"
+        console.print(f"[bold]vpn-installer[/bold] [primary]{v}[/primary]")
+        console.print("[dim]Made by jackh0006 • jackh109867@gmail.com • No tracking • No telemetry[/dim]")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False, "--version", "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Show version and exit.",
+    ),
+):
+    """OpenVPN-over-HAProxy Installer - stealthy, multiplexed VPN on port 443."""
+
+
 class Installer:
     """Main installer orchestration class."""
 

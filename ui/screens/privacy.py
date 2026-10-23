@@ -4,7 +4,7 @@ Teaches like a 5-year-old with visual explanations.
 """
 
 import asyncio
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.columns import Columns
@@ -80,7 +80,6 @@ class PrivacyScreen:
                 "✅ DPI sees only: Standard TLS 1.3 handshake (no VPN signatures)",
                 "✅ Websites see only: Your VPS IP (not your home IP)",
                 "✅ VPS provider sees only: Encrypted traffic volume",
-                "",
                 "🔒 Your actual browsing, DNS, and data are invisible to all of them.",
             ]
         )
@@ -94,44 +93,48 @@ class PrivacyScreen:
     def _render_entity(self, entity_id: str, title: str, content: dict, expanded: bool) -> Panel:
         """Render an entity panel with expand/collapse."""
         icon = "▼" if expanded else "▶"
-        toggle_text = f"[primary]{icon} Tell me more[/primary]" if not expanded else f"[primary]{icon} Show less[/primary]"
+        toggle_text = f"[primary]{icon} {'Show less' if expanded else 'Tell me more'}[/primary]"
 
-        # Base content (always shown)
-        lines = []
+        # Renderables (strings AND tables mixed - use Group, never str())
+        renderables = []
 
         # Sees table
         if content["sees"]:
+            renderables.append(Text.from_markup("[bold success]✅ What They SEE:[/bold success]"))
             sees_table = Table(show_header=False, box=None, padding=(0, 1))
             sees_table.add_column("", style="success", width=3)
             sees_table.add_column("", style="text")
             for item in content["sees"]:
                 sees_table.add_row("✅", item)
-            lines.append("[bold success]✅ What They SEE:[/bold success]")
-            lines.append(sees_table)
+            renderables.append(sees_table)
 
         # Doesn't see table
         if content["doesnt_see"]:
+            renderables.append(Text())  # blank line
+            renderables.append(Text.from_markup("[bold error]❌ What They DON'T See:[/bold error]"))
             doesnt_table = Table(show_header=False, box=None, padding=(0, 1))
             doesnt_table.add_column("", style="error", width=3)
             doesnt_table.add_column("", style="text")
             for item in content["doesnt_see"]:
                 doesnt_table.add_row("❌", item)
-            lines.append("\n[bold error]❌ What They DON'T See:[/bold error]")
-            lines.append(doesnt_table)
+            renderables.append(doesnt_table)
 
         # Expanded content
         if expanded and content.get("details"):
-            lines.append("\n[dim]🔧 Technical Details:[/dim]")
+            renderables.append(Text())
+            renderables.append(Text.from_markup("[dim]🔧 Technical Details:[/dim]"))
             for detail in content["details"]:
-                lines.append(f"  [dim]• {detail}[/dim]")
+                renderables.append(Text.from_markup(f"  [dim]• {detail}[/dim]"))
 
         if expanded and content.get("analogy"):
-            lines.append(f"\n[dim]💭 Analogy: {content['analogy']}[/dim]")
+            renderables.append(Text())
+            renderables.append(Text.from_markup(f"[dim]💭 Analogy: {content['analogy']}[/dim]"))
 
-        lines.append(f"\n[dim]{toggle_text}[/dim]")
+        renderables.append(Text())
+        renderables.append(Text.from_markup(toggle_text))
 
         return Panel(
-            "\n".join(str(l) for l in lines),
+            Group(*renderables),
             title=f"[primary]{title}[/primary]",
             border_style="primary" if expanded else "border",
             padding=(1, 2),

@@ -2,7 +2,7 @@
 Privacy Display - Render privacy reports beautifully.
 """
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.columns import Columns
@@ -74,12 +74,13 @@ def render_entity_panel(explanation: EntityExplanation, expanded: bool = False) 
             lines.append(f"\n[dim]💭 Analogy: {explanation.analogy}[/dim]")
 
     toggle = "▼ Show less" if expanded else "▶ Tell me more"
-    lines.append(f"\n[dim]{toggle}[/dim]")
+    lines.append(Text())
+    lines.append(Text.from_markup(f"[dim]{toggle}[/dim]"))
 
     border_style = "primary" if expanded else "border"
 
     return Panel(
-        "\n".join(str(l) for l in lines),
+        Group(*lines),
         title=f"[primary]{explanation.icon} {explanation.name}[/primary]",
         border_style=border_style,
         padding=(1, 2),

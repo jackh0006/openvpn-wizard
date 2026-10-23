@@ -3,7 +3,7 @@ UI Components - Reusable components with "Explain Like I'm 5" style.
 """
 
 from typing import Optional, Callable, List, Dict, Any
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 from rich.table import Table
@@ -42,14 +42,15 @@ class ExplainedPanel:
 
     def render(self) -> Panel:
         """Render the explained panel."""
-        content = []
+        items = []
 
         # Simple explanation (always shown)
-        content.append(f"[bold]{self.icon} {self.simple}[/bold]\n")
+        items.append(Text.from_markup(f"[bold]{self.icon} {self.simple}[/bold]"))
 
         # Analogy (if provided)
         if self.analogy:
-            content.append(f"[dim]💭 Think of it like: {self.analogy}[/dim]\n")
+            items.append(Text())
+            items.append(Text.from_markup(f"[dim]💭 Think of it like: {self.analogy}[/dim]"))
 
         # What you see / don't see (if provided)
         if self.sees or self.doesnt_see:
@@ -63,15 +64,15 @@ class ExplainedPanel:
                 dont = self.doesnt_see[i] if i < len(self.doesnt_see) else ""
                 table.add_row(see, dont)
 
-            content.append(table)
-            content.append("")
+            items.append(table)
+            items.append(Text())
 
         # Technical details (collapsed by default, but we'll show inline)
         if self.technical:
-            content.append(f"[muted]🔧 Technical: {self.technical}[/muted]")
+            items.append(Text.from_markup(f"[muted]🔧 Technical: {self.technical}[/muted]"))
 
         return Panel(
-            "\n".join(str(c) for c in content),
+            Group(*items),
             title=f"[primary]{self.title}[/primary]",
             border_style="primary",
             padding=(1, 2),
@@ -250,7 +251,8 @@ class InfoBox:
         if self.details:
             lines.append("")
             for d in self.details:
-                lines.append(f"  • {d}")
+                if d:
+                    lines.append(f"  • {d}")
 
         return Panel(
             "\n".join(lines),

@@ -9,6 +9,7 @@ from rich.table import Table
 from rich.text import Text
 from rich.prompt import Prompt, Confirm
 from rich.columns import Columns
+from rich.rule import Rule
 
 from ui.theme import get_console, COLORS
 from ui.components import InfoBox, CreditsFooter, SectionHeader
@@ -18,6 +19,12 @@ from core.config import (
 )
 from utils.system import get_public_ip, get_wan_interface
 from core.exceptions import ValidationError
+
+# The 9 editable fields, in display order (menu numbers 1-9 map to this list)
+EDITABLE_FIELDS = [
+    "server_ip", "admin_user", "admin_pass", "vpn_user", "vpn_pass",
+    "client_name", "domain1", "domain2", "reality_domain",
+]
 
 
 class ParameterScreen:
@@ -33,6 +40,13 @@ class ParameterScreen:
         # Pre-fill with auto-detected values
         await self._auto_detect()
 
+        # Seed sensible defaults for optional-edit fields so the user only
+        # edits what they want to change (validation uses self.fields, and
+        # these defaults are shown in the form).
+        self.fields.setdefault("admin_user", "admin")
+        self.fields.setdefault("vpn_user", "vpnuser")
+        self.fields.setdefault("client_name", "01-JH")
+
         while True:
             self._show_form()
             choice = await self._get_action()
@@ -44,7 +58,7 @@ class ParameterScreen:
                 return None
             elif choice == "exit":
                 return None
-            elif choice in self.fields:
+            elif choice in EDITABLE_FIELDS:
                 await self._edit_field(choice)
 
     async def _auto_detect(self):
@@ -210,7 +224,7 @@ class ParameterScreen:
             content.append(f"[error]Error: {error}[/error]")
 
         if show_confirm and value:
-            content.append(f"[warning]⚠️  Press Enter to confirm, or type new IP[/warning]")
+            content.append("[warning]⚠️  Select this field (choice 1) and press Enter to confirm — or type a new IP[/warning]")
 
         panel = Panel(
             "\n".join(content),
@@ -229,17 +243,6 @@ class ParameterScreen:
         self.console.print("  [primary]b.[/primary] [bold]Back[/bold]")
         self.console.print("  [primary]q.[/primary] [bold]Exit[/bold]")
 
-        # Map field numbers
-        field_ids = list(self.fields.keys())
-        # Add fields that might not be set yet
-        all_fields = [
-            "server_ip", "admin_user", "admin_pass", "vpn_user", "vpn_pass",
-            "client_name", "domain1", "domain2", "reality_domain"
-        ]
-        for f in all_fields:
-            if f not in field_ids:
-                field_ids.append(f)
-
         while True:
             try:
                 choice = self.console.input("\n[primary]Choice: [/primary]").strip().lower()
@@ -251,12 +254,13 @@ class ParameterScreen:
                     return "exit"
                 elif choice.isdigit():
                     idx = int(choice) - 1
-                    if 0 <= idx < len(field_ids):
-                        return field_ids[idx]
-                elif choice in field_ids:
+                    if 0 <= idx < len(EDITABLE_FIELDS):
+                        return EDITABLE_FIELDS[idx]
+                    self.console.print(f"[error]Invalid number. Use 1-{len(EDITABLE_FIELDS)}.[/error]")
+                elif choice in EDITABLE_FIELDS:
                     return choice
                 else:
-                    self.console.print("[error]Invalid choice.[/error]")
+                    self.console.print(f"[error]Invalid choice. Use 1-{len(EDITABLE_FIELDS)}, field name, or v/b/q.[/error]")
             except (KeyboardInterrupt, EOFError):
                 return "exit"
 
@@ -291,12 +295,28 @@ class ParameterScreen:
         help_text = help_texts.get(field_id, "")
 
         # Special handling for server_ip confirmation
-        if field_id == "server_ip" and self.fields.get("server_ip_confirmed"):
-            self.console.print(f"[dim]Current IP: {self.fields['server_ip']}[/dim]")
-            new_val = await self._prompt_input("New IP (Enter to keep): ", is_password=False)
-            if new_val:
-                self.fields["server_ip"] = new_val
-                self.fields["server_ip_confirmed"] = False
+        # Enter = confirm the current (auto-detected) IP; typing a new IP replaces and confirms it
+        if field_id == "server_ip":
+            cur = self.fields.get("server_ip", "")
+            if self.fields.get("server_ip_confirmed"):
+                self.console.print(f"[dim]Current IP: {cur}[/dim]")
+            new_val = await self._prompt_input(
+                f"[primary]IP (Enter to confirm '{cur}', or type new): [/primary]",
+                is_password=False,
+            )
+            if not new_val:
+                # Enter pressed -> this IS the confirmation
+                self.fields["server_ip_confirmed"] = True
+                self.errors.pop("server_ip", None)
+                self.console.print(f"[success]✓ Server IP confirmed: {cur}[/success]")
+                return
+            if not validate_ip(new_val):
+                self.console.print("[error]Invalid IPv4 address. Try again (e.g. 203.0.113.10).[/error]")
+                return
+            self.fields["server_ip"] = new_val
+            self.fields["server_ip_confirmed"] = True
+            self.errors.pop("server_ip", None)
+            self.console.print(f"[success]✓ Server IP set and confirmed: {new_val}[/success]")
             return
 
         while True:

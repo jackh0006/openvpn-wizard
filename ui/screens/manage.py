@@ -91,7 +91,8 @@ class ManageScreen:
         self.console.print("  [primary]3.[/primary] [bold]🔑 Change Password[/bold]")
         self.console.print("  [primary]4.[/primary] [bold]✏️ Rename User[/bold]")
         self.console.print("  [primary]5.[/primary] [bold]📄 Export Profile[/bold]")
-        self.console.print("  [primary]6.[/primary] [bold]🔄 Refresh[/bold]")
+        self.console.print("  [primary]6.[/primary] [bold]📋 List All Users (detailed)[/bold]")
+        self.console.print("  [primary]7.[/primary] [bold]🔄 Refresh[/bold]")
         self.console.print("  [primary]b.[/primary] [bold]Back to Main[/bold]")
         self.console.print("  [primary]q.[/primary] [bold]Exit[/bold]")
 
@@ -113,7 +114,9 @@ class ManageScreen:
                     return "rename"
                 elif choice in ("5", "e", "export", "profile"):
                     return "export"
-                elif choice in ("6", "refresh", "reload"):
+                elif choice in ("6", "l", "list", "ls"):
+                    return "list"
+                elif choice in ("7", "refresh", "reload"):
                     return "refresh"
                 elif choice in ("b", "back"):
                     return "exit"
